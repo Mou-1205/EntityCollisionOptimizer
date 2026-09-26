@@ -1,11 +1,11 @@
 package org.edtp.entitycollisionoptimizer.integration;
 
-import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.EntityTypes;
-import net.minecraft.world.entity.monster.zombie.Zombie;
-import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.level.GameRules;
 import net.minecraft.world.phys.Vec3;
 
 import java.io.ByteArrayOutputStream;
@@ -37,11 +37,7 @@ public final class ZombieCrammingIntegrationGameTests {
     private static final long GAME_TIME = 1_000L;
     private static final Vec3 SCENE_ORIGIN = new Vec3(-5_910_000.0, -57.0, -9_908_000.0);
 
-    @GameTest(
-            maxTicks = 400,
-            padding = 48,
-            environment = "entity_collision_optimizer:integration"
-    )
+    @GameTest(timeoutTicks = 400)
     public void crowdedChamberMatchesVanilla(GameTestHelper helper) {
         ScenarioRun run = new ScenarioRun(helper);
         helper.onEachTick(run::captureTick);
@@ -68,7 +64,7 @@ public final class ZombieCrammingIntegrationGameTests {
             this.helper = helper;
             level = helper.getLevel();
             sceneOrigin = SCENE_ORIGIN;
-            previousCramming = level.getGameRules().get(GameRules.MAX_ENTITY_CRAMMING);
+            previousCramming = level.getGameRules().getRule(GameRules.RULE_MAX_ENTITY_CRAMMING).get();
             arena = new IntegrationArena(level, ENTITY_ID_BASE, LEVEL_SEED);
             previousDayTime = arena.defaultClockTime();
             previousGameTime = arena.gameTime();
@@ -76,11 +72,8 @@ public final class ZombieCrammingIntegrationGameTests {
 
         private void start() {
             try {
-                level.getGameRules().set(
-                        GameRules.MAX_ENTITY_CRAMMING,
-                        MAX_ENTITY_CRAMMING,
-                        level.getServer()
-                );
+                level.getGameRules().getRule(GameRules.RULE_MAX_ENTITY_CRAMMING)
+                        .set(MAX_ENTITY_CRAMMING, level.getServer());
                 arena.buildStoneRoom(sceneOrigin, CHAMBER_SIZE, CHAMBER_HEIGHT, CHAMBER_SIZE);
                 arena.awaitReadyRoom(sceneOrigin, CHAMBER_SIZE, CHAMBER_HEIGHT, CHAMBER_SIZE);
                 prepared = true;
@@ -123,7 +116,7 @@ public final class ZombieCrammingIntegrationGameTests {
             level.getRandom().setSeed(LEVEL_SEED);
             Random spawnRandom = new Random(SPAWN_SEED);
             for (int index = 0; index < ENTITY_COUNT; index++) {
-                Zombie zombie = arena.spawn(EntityTypes.ZOMBIE, spawnPosition(sceneOrigin, spawnRandom));
+                Zombie zombie = arena.spawn(EntityType.ZOMBIE, spawnPosition(sceneOrigin, spawnRandom));
                 ZombieTrace.normalize(
                         zombie,
                         LEVEL_SEED + ENTITY_SEED_STEP * index
@@ -159,11 +152,8 @@ public final class ZombieCrammingIntegrationGameTests {
             if (cleanedUp) return;
             cleanedUp = true;
             arena.close();
-            level.getGameRules().set(
-                    GameRules.MAX_ENTITY_CRAMMING,
-                    previousCramming,
-                    level.getServer()
-            );
+            level.getGameRules().getRule(GameRules.RULE_MAX_ENTITY_CRAMMING)
+                    .set(previousCramming, level.getServer());
             arena.setDefaultClockTime(previousDayTime);
             arena.setGameTime(previousGameTime);
         }
