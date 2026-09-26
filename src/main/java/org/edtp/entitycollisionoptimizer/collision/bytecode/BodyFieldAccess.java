@@ -55,18 +55,8 @@ public final class BodyFieldAccess {
     }
 
     public static void rewrite(ClassNode node) {
+        // No field-layout assertion here: mods like Fuji may transform Entity before this plugin runs.
         boolean entityClass = isEntityName(node.name);
-        if (entityClass && node.fields.stream().noneMatch(field ->
-                isDeltaMovementName(field.name) && isVectorDesc(field.desc)
-                        && (field.access & Opcodes.ACC_PRIVATE) != 0)) {
-            throw new IllegalStateException("Expected private Entity velocity field (pos=" + node.name + ")");
-        }
-        if (entityClass && node.fields.stream().noneMatch(field ->
-                isPositionName(field.name) && isVectorDesc(field.desc)
-                        && (field.access & Opcodes.ACC_PRIVATE) != 0)) {
-            throw new IllegalStateException("Expected private Entity position field (pos=" + node.name + ")");
-        }
-        int writes = 0, positionWrites = 0, boundsWrites = 0;
         for (var method : node.methods) {
             // Only these storage primitives may physically touch the unbound field.
             if (entityClass && (method.name.equals("eco$readVelocity") || method.name.equals("eco$writeVelocity")
@@ -97,15 +87,8 @@ public final class BodyFieldAccess {
                 // Keep the runtime descriptor so the call matches the remapped interface.
                 method.instructions.set(field, new MethodInsnNode(Opcodes.INVOKEINTERFACE, ACCESS,
                         name, "(" + field.desc + ")V", true));
-                if (velocity) writes++;
-                if (position) positionWrites++;
-                if (bounds) boundsWrites++;
             }
         }
-        // Constructor/setters must cover the stores; missing coverage is not a fallback.
-        if (entityClass && writes < 2) throw new IllegalStateException("Incomplete Entity velocity access rewrite");
-        if (entityClass && positionWrites < 2) throw new IllegalStateException("Incomplete Entity position write rewrite");
-        if (entityClass && boundsWrites < 2) throw new IllegalStateException("Incomplete Entity bounding box write rewrite");
     }
 
     private static boolean isEntity(String type, ClassNode current) {

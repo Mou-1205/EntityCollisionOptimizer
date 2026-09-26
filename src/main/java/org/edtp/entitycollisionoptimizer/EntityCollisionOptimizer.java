@@ -12,7 +12,6 @@ import net.minecraft.server.level.ServerLevel;
 import org.slf4j.Logger;
 
 public class EntityCollisionOptimizer implements ModInitializer {
-    public static final String MODID = "entity_collision_optimizer";
     public static final Logger LOGGER = LogUtils.getLogger();
 
     @Override

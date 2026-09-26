@@ -32,6 +32,8 @@ import org.spongepowered.asm.mixin.Pseudo;
         "net.minecraft.world.entity.decoration.ArmorStand",
         "net.minecraft.world.entity.monster.Vex",
         "net.minecraft.world.entity.player.Player",
-        "carpet.script.utils.EntityTools", "carpet.script.value.EntityValue$2"
+        "carpet.script.utils.EntityTools", "carpet.script.value.EntityValue$2",
+        // Fuji widens Entity.position and reads it directly here.
+        "mod.fuji.core.auxiliary.minecraft.EntityHelper"
 })
 public abstract class BodyFieldConsumersMixin {}
