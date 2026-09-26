@@ -44,7 +44,7 @@ public final class EntityMovementCollision {
             }
             if (movement.needsStep()) collectStep(entity, hardIds, movement);
             return movement;
-        } catch (RuntimeException | Error failure) {
+        } catch (RuntimeException failure) {
             movement.close();
             throw failure;
         }
