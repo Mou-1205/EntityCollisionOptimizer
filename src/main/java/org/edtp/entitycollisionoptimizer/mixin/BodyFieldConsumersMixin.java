@@ -11,8 +11,8 @@ import org.spongepowered.asm.mixin.Pseudo;
 @Mixin(targets = {
         "net.minecraft.server.level.ServerEntity", "net.minecraft.server.level.ChunkMap",
         "net.minecraft.world.entity.ExperienceOrb", "net.minecraft.world.entity.LivingEntity",
-        "net.minecraft.world.entity.animal.camel.Camel", "net.minecraft.world.entity.animal.dolphin.Dolphin",
-        "net.minecraft.world.entity.animal.fish.AbstractFish", "net.minecraft.world.entity.animal.horse.AbstractHorse",
+        "net.minecraft.world.entity.animal.camel.Camel", "net.minecraft.world.entity.animal.Dolphin",
+        "net.minecraft.world.entity.animal.AbstractFish", "net.minecraft.world.entity.animal.horse.AbstractHorse",
         "net.minecraft.world.entity.item.ItemEntity",
         "net.minecraft.world.entity.decoration.HangingEntity",
         "net.minecraft.world.entity.monster.Blaze",
@@ -24,7 +24,6 @@ import org.spongepowered.asm.mixin.Pseudo;
         "net.minecraft.world.entity.projectile.Projectile",
         "net.minecraft.world.entity.projectile.AbstractHurtingProjectile",
         "net.minecraft.world.entity.projectile.AbstractArrow",
-        "net.minecraft.world.item.enchantment.effects.ApplyEntityImpulse",
         "net.minecraft.world.entity.AreaEffectCloud",
         "net.minecraft.world.entity.Display",
         "net.minecraft.world.entity.Interaction", "net.minecraft.world.entity.Marker",
