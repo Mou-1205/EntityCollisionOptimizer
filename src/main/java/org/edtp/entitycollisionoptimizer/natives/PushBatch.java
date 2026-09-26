@@ -55,7 +55,20 @@ public final class PushBatch implements AutoCloseable {
     public void applyNativeRun(LivingEntity source, int from, int to) {
         if (from < 0 || to < from || to > size) throw new IndexOutOfBoundsException("Invalid push run range");
         if (from == to) return;
+        org.edtp.entitycollisionoptimizer.NativePathStats.NATIVE_PUSH_RUNS.incrementAndGet();
+        // Java fields are authoritative at entry (tests may write them via raw accessors).
+        for (int index = from; index < to; index++) {
+            int slot = bodySlots[index];
+            Entity target = bodies.entity(slot);
+            bodies.velocity(slot, ((org.edtp.entitycollisionoptimizer.collision.CollisionBodyAccess) target).eco$readVelocity());
+            bodies.position(slot, ((org.edtp.entitycollisionoptimizer.collision.CollisionBodyAccess) target).eco$readPosition());
+            bodies.invalidatePushState(slot);
+        }
         int sourceSlot = bodies.sourceSlot(source);
+        if (sourceSlot >= 0) {
+            bodies.velocity(sourceSlot, ((org.edtp.entitycollisionoptimizer.collision.CollisionBodyAccess) source).eco$readVelocity());
+            bodies.position(sourceSlot, ((org.edtp.entitycollisionoptimizer.collision.CollisionBodyAccess) source).eco$readPosition());
+        }
         MemorySegment sourceBody;
         if (sourceSlot >= 0) {
             sourceBody = bodies.row(sourceSlot);
@@ -65,7 +78,14 @@ public final class PushBatch implements AutoCloseable {
         }
         FFMBackend.executePushRun(context, sourceBody, bodies.memory(), bodies.capacity(),
                 bodySlots, from, to - from);
-        if (sourceSlot < 0) bodies.publishDetachedSource(source, sourceBody);
+        if (sourceSlot < 0) {
+            bodies.publishDetachedSource(source, sourceBody);
+        } else {
+            bodies.publishSlot(sourceSlot);
+        }
+        for (int index = from; index < to; index++) {
+            bodies.publishSlot(bodySlots[index]);
+        }
     }
 
     @Override

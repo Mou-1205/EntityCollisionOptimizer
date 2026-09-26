@@ -18,6 +18,7 @@ import org.edtp.entitycollisionoptimizer.natives.NativeMovement;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Slice;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.List;
@@ -39,7 +40,8 @@ public abstract class EntityMovementMixin {
             "Lnet/minecraft/world/entity/Entity;collide(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;"))
     private Vec3 eco$solveMovement(Entity entity, Vec3 requested, Operation<Vec3> original,
                                    @Share("eco$movement") LocalRef<NativeMovement> transaction) {
-        if (!(entity.level() instanceof ServerLevel)) {
+        if (!(entity.level() instanceof ServerLevel level)
+                || !org.edtp.entitycollisionoptimizer.natives.CollisionFrame.isFrameActive(level)) {
             return original.call(entity, requested);
         }
         var result = EntityMovementCollision.solve(entity, requested);
@@ -47,18 +49,39 @@ public abstract class EntityMovementMixin {
         return result.displacement();
     }
 
-    @WrapOperation(method = "move", at = @At(value = "INVOKE", ordinal = 1, target =
-            "Lnet/minecraft/world/phys/Vec3;add(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;"))
-    private Vec3 eco$movementDestination(Vec3 from, Vec3 displacement, Operation<Vec3> original,
+    /**
+     * 1.21.1 publishes the post-collide position via {@code setPos(DDD)} component adds,
+     * not {@code Vec3.add}. Slice after {@code collide} so the early {@code setPos} is untouched.
+     */
+    @WrapOperation(
+            method = "move",
+            slice = @Slice(from = @At(value = "INVOKE", target =
+                    "Lnet/minecraft/world/entity/Entity;collide(Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;")),
+            at = @At(value = "INVOKE", ordinal = 0, target = "Lnet/minecraft/world/entity/Entity;setPos(DDD)V"))
+    private void eco$movementDestination(Entity instance, double x, double y, double z, Operation<Void> original,
                                          @Share("eco$movement") LocalRef<NativeMovement> transaction) {
-        var result = transaction.get();
-        return result == null ? original.call(from, displacement) : result.destination(from);
+        NativeMovement result = transaction.get();
+        if (result == null) {
+            original.call(instance, x, y, z);
+            return;
+        }
+        try {
+            Vec3 dest = result.destination(new Vec3(instance.getX(), instance.getY(), instance.getZ()));
+            original.call(instance, dest.x, dest.y, dest.z);
+        } catch (IllegalStateException ex) {
+            // Third-party mixins may move the entity between solve and publish; keep vanilla coordinates.
+            org.edtp.entitycollisionoptimizer.NativePathStats.DEST_FALLBACKS.incrementAndGet();
+            org.edtp.entitycollisionoptimizer.EntityCollisionOptimizer.LOGGER
+                    .warn("Movement destination check failed; using vanilla setPos coordinates", ex);
+            original.call(instance, x, y, z);
+        }
     }
 
     @Inject(method = "collide", at = @At("HEAD"), cancellable = true)
     private void eco$ownMovement(Vec3 requested, CallbackInfoReturnable<Vec3> cir) {
         Entity entity = (Entity) (Object) this;
-        if (entity.level() instanceof ServerLevel) {
+        if (entity.level() instanceof ServerLevel level
+                && org.edtp.entitycollisionoptimizer.natives.CollisionFrame.isFrameActive(level)) {
             cir.setReturnValue(EntityMovementCollision.collide(entity, requested));
         }
     }
@@ -67,18 +90,10 @@ public abstract class EntityMovementMixin {
             at = @At("HEAD"), cancellable = true)
     private static void eco$ownEntityBox(Entity entity, Vec3 requested, AABB box, Level level,
                                          List<VoxelShape> entities, CallbackInfoReturnable<Vec3> cir) {
-        if (level instanceof ServerLevel) {
+        if (level instanceof ServerLevel serverLevel
+                && org.edtp.entitycollisionoptimizer.natives.CollisionFrame.isFrameActive(serverLevel)) {
             CollisionContext context = entity == null ? CollisionContext.empty() : CollisionContext.of(entity);
             cir.setReturnValue(EntityMovementCollision.collideBox(level, context, entity, requested, box, entities));
-        }
-    }
-
-    @Inject(method = "collideBoundingBox(Lnet/minecraft/world/phys/shapes/CollisionContext;Lnet/minecraft/world/phys/Vec3;Lnet/minecraft/world/phys/AABB;Lnet/minecraft/world/level/Level;Ljava/util/List;)Lnet/minecraft/world/phys/Vec3;",
-            at = @At("HEAD"), cancellable = true)
-    private static void eco$ownContextBox(CollisionContext context, Vec3 requested, AABB box, Level level,
-                                          List<VoxelShape> entities, CallbackInfoReturnable<Vec3> cir) {
-        if (level instanceof ServerLevel) {
-            cir.setReturnValue(EntityMovementCollision.collideBox(level, context, null, requested, box, entities));
         }
     }
 }

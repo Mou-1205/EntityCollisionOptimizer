@@ -3,11 +3,9 @@
   "minVersion": "0.8",
   "package": "org.edtp.entitycollisionoptimizer.mixin",
   "plugin": "org.edtp.entitycollisionoptimizer.mixin.BodyMixinPlugin",
-  "compatibilityLevel": "JAVA_25",
+  "compatibilityLevel": "JAVA_22",
   "mixins": [
     "BodyFieldConsumersMixin",
-    "InterfaceBodyFieldConsumersMixin",
-    "CreakingMixin",
     "CommonLevelAccessorMixin",
     "EntityMixin",
     "EntityTrackingMixin",
@@ -22,6 +20,7 @@
     "PalettedContainerMixin",
     "ScoreboardMixin",
     "ServerPlayerMixin",
+    "ServerEntitySyncMixin",
     "PersistentEntitySectionManagerAccessor",
     "ServerLevelAccessor",
     "ServerLevelMixin"

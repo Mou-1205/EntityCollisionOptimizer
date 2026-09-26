@@ -1,4 +1,6 @@
 package org.edtp.entitycollisionoptimizer.gametest;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.level.block.Blocks;
 
 import it.unimi.dsi.fastutil.doubles.DoubleArrayList;
 import it.unimi.dsi.fastutil.doubles.DoubleList;
@@ -9,6 +11,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.BitSetDiscreteVoxelShape;
 import net.minecraft.world.phys.shapes.CubeVoxelShape;
 import net.minecraft.world.phys.shapes.VoxelShape;
+
 import org.edtp.entitycollisionoptimizer.collision.blocks.NativeVoxelAccess;
 import org.edtp.entitycollisionoptimizer.gametest.mixin.EntityCollisionInvoker;
 import org.edtp.entitycollisionoptimizer.natives.NativeMovement;
@@ -24,7 +27,7 @@ final class SingleCellParity {
         VoxelShape cell = new SingleCell();
         helper.assertTrue((((NativeVoxelAccess) cell).eco$nativeGeometry().get(JAVA_INT, 12) & 4) != 0,
                 "simple cell uses interval solver");
-        VoxelShape subdivided = new CubeVoxelShape(BitSetDiscreteVoxelShape.withFilledBounds(4, 4, 4, 0, 0, 0, 4, 4, 4));
+        VoxelShape subdivided = new SubdividedCell();
         helper.assertTrue((((NativeVoxelAccess) subdivided).eco$nativeGeometry().get(JAVA_INT, 12) & 4) == 0,
                 "a solid box with internal grid planes must keep its voxel semantics");
         NativeVoxelParity.compare(helper, subdivided, "internal voxel planes");
@@ -62,9 +65,22 @@ final class SingleCellParity {
                 "ECO_SINGLE_CELL_PARITY bitwise_cases={} internal_planes=true mixed_descriptors=true result=passed", cases);
     }
 
+    private static BitSetDiscreteVoxelShape filled(int nx, int ny, int nz) {
+        BitSetDiscreteVoxelShape shape = new BitSetDiscreteVoxelShape(nx, ny, nz);
+        for (int x = 0; x < nx; x++) for (int y = 0; y < ny; y++) for (int z = 0; z < nz; z++) shape.fill(x, y, z);
+        return shape;
+    }
+
+    /** A solid unit cube subdivided into 4x4x4 cells: voxel semantics, not the interval solver. */
+    private static final class SubdividedCell extends VoxelShape {
+        private final DoubleList grid = DoubleArrayList.wrap(new double[]{0, .25, .5, .75, 1});
+        SubdividedCell() { super(filled(4, 4, 4)); }
+        @Override public DoubleList getCoords(Direction.Axis axis) { return grid; }
+    }
+
     private static final class SingleCell extends VoxelShape {
         private final DoubleList coordinates = DoubleArrayList.wrap(new double[]{-0.0, .5});
-        SingleCell() { super(BitSetDiscreteVoxelShape.withFilledBounds(1, 1, 1, 0, 0, 0, 1, 1, 1)); }
+        SingleCell() { super(filled(1, 1, 1)); }
         @Override public DoubleList getCoords(Direction.Axis axis) { return coordinates; }
     }
 }

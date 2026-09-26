@@ -178,14 +178,35 @@ public final class CollisionStateTable implements AutoCloseable {
     void publishDetachedSource(Entity entity, MemorySegment source) {
         CollisionBodyAccess access = (CollisionBodyAccess) entity;
         if (source.get(JAVA_LONG, VERSION_OFFSET) != 0) {
-            access.eco$writeVelocity(new Vec3(
+            access.eco$publishVelocity(new Vec3(
                     source.get(JAVA_DOUBLE, VELOCITY_OFFSET),
                     source.get(JAVA_DOUBLE, VELOCITY_OFFSET + Double.BYTES),
                     source.get(JAVA_DOUBLE, VELOCITY_OFFSET + 2L * Double.BYTES)
             ));
         }
-        boolean needsSync = source.get(JAVA_INT, SYNC_OFFSET) != 0;
-        if (access.eco$readNeedsSync() != needsSync) access.eco$writeNeedsSync(needsSync);
+        boolean kernelBit = source.get(JAVA_INT, SYNC_OFFSET) != 0;
+        access.eco$writeNeedsSync(kernelBit);
+        if (kernelBit) entity.hasImpulse = true;
+    }
+
+    /** Native push mutates the bound row; copy velocity back so Java fields stay canonical. */
+    void publishSlot(int slot) {
+        Entity entity = entities[slot];
+        if (entity == null) return;
+        long offset = (long) slot * STRIDE_BYTES;
+        // Capture the kernel bit before any Java write can mirror SYNC back into the row.
+        boolean kernelBit = memory.get(JAVA_INT, offset + SYNC_OFFSET) != 0;
+        Vec3 value = new Vec3(
+                memory.get(JAVA_DOUBLE, offset + 2L * Double.BYTES),
+                memory.get(JAVA_DOUBLE, offset + 3L * Double.BYTES),
+                memory.get(JAVA_DOUBLE, offset + 4L * Double.BYTES)
+        );
+        CollisionBodyAccess access = (CollisionBodyAccess) entity;
+        access.eco$publishVelocity(value);
+        // Dirty bit follows the kernel write, not the Java setter (skipped bodies stay clean).
+        access.eco$writeNeedsSync(kernelBit);
+        // Vanilla Entity.push marks impulse so ServerEntity.sendChanges publishes motion.
+        if (kernelBit) entity.hasImpulse = true;
     }
 
     /** Materialize at most once between writes, on demand, never once per collision pair. */
@@ -207,7 +228,8 @@ public final class CollisionStateTable implements AutoCloseable {
 
     private void ensureCapacity(int required) {
         if (required <= entities.length) return;
-        int capacity = Math.max(required, entities.length + (entities.length >> 1) + 256);
+        // 2x growth: chunk-load entity bursts must not reallocate the native arena every few binds.
+        int capacity = Math.max(required, Math.max(entities.length * 2, entities.length + 1024));
         bounds.capacity(capacity);
         Arena nextArena = Arena.ofShared();
         MemorySegment next;

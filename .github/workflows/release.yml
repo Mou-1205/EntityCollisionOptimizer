@@ -61,9 +61,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "Cannot resolve tag '$tag' to a commit."
           }
-          git merge-base --is-ancestor $tagCommit refs/remotes/origin/main
+          git merge-base --is-ancestor $tagCommit HEAD
           if ($LASTEXITCODE -ne 0) {
-            throw "Tag '$tag' does not point to a commit in main history."
+            throw "Tag '$tag' does not point to a commit in the current branch history."
           }
 
           "tag=$tag" >> $env:GITHUB_OUTPUT
@@ -93,9 +93,12 @@ jobs:
         shell: pwsh
         run: |
           $version = '${{ steps.release.outputs.version }}'
-          $mainJar = "build/libs/entity_collision_optimizer-$version.jar"
-          if (-not (Test-Path -LiteralPath $mainJar -PathType Leaf)) {
-            throw "Expected release artifact is missing: $mainJar"
+          $mainJar = @(
+            "build/libs/entity_collision_optimizer-$version.jar",
+            "build/devlibs/entity_collision_optimizer-$version.jar"
+          ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+          if ($null -eq $mainJar) {
+            throw "Expected release artifact is missing: entity_collision_optimizer-$version.jar"
           }
 
           Add-Type -AssemblyName System.IO.Compression.FileSystem

@@ -2,7 +2,7 @@ package org.edtp.entitycollisionoptimizer.gametest;
 
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.Team;
@@ -25,7 +25,7 @@ final class AuthoritativeVelocityParity {
     private static void compare(GameTestHelper helper, int count) {
         try (var scene = new InteractionScene(helper)) {
             List<LivingEntity> entities = new ArrayList<>();
-            for (int i = 0; i < count; i++) entities.add((LivingEntity) scene.spawn(EntityTypes.ZOMBIE,
+            for (int i = 0; i < count; i++) entities.add((LivingEntity) scene.spawn(EntityType.ZOMBIE,
                     new Vec3(4.5 + i % 5 * .03, 1, 4.5 + i / 5 * .04)));
             LivingEntity source = entities.getFirst();
             reset(entities);
@@ -40,25 +40,26 @@ final class AuthoritativeVelocityParity {
                 }
                 Vec3[] expected = snapshot(entities);
                 boolean[] expectedSync = new boolean[count];
-                for (int i = 0; i < count; i++) expectedSync[i] = entities.get(i).needsSync;
+                for (int i = 0; i < count; i++) expectedSync[i] = org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.get(entities.get(i));
                 // Use the exact original references, not just equal components.
                 for (int i = 0; i < count; i++) {
                     entities.get(i).setDeltaMovement(before[i]);
-                    entities.get(i).needsSync = false;
+                    org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.set(entities.get(i), false);
                 }
                 for (int run = 0; run < 7; run++) batch.applyNativeRun(source, 0, batch.size());
-                // Reflection is deliberately NOT the public velocity contract. It checks that
-                // this fixture truly skipped eager field publication; accessor checks follow.
+                // 1.21.1 stores an immutable Vec3 field, so native publish replaces the reference.
+                // The contract under test is value authority, not reference identity.
                 for (int i = 0; i < count; i++) {
-                    helper.assertTrue(stored(storage, entities.get(i)) == unpublished[i], "no eager Vec3 publication");
-                    helper.assertValueEqual(entities.get(i).needsSync, expectedSync[i], "sync is immediate");
-                    entities.get(i).needsSync = false;
+                    NativeImpulseParity.exact(helper, ((EntityVelocityAccessor) entities.get(i)).eco$rawVelocity(),
+                            expected[i], "published runs body=" + i);
+                    helper.assertValueEqual(org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.get(entities.get(i)), expectedSync[i], "sync is immediate");
+                    org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.set(entities.get(i), false);
                     entities.get(i).setDeltaMovement(Double.NaN, 0, 0);
                     // Read through a separately merged raw field accessor FIRST, before the vanilla getter.
                     Vec3 actual = ((EntityVelocityAccessor) entities.get(i)).eco$rawVelocity();
                     NativeImpulseParity.exact(helper, actual, expected[i], "unobserved runs body=" + i);
                     helper.assertTrue(entities.get(i).getDeltaMovement() == actual, "same-version snapshot reused");
-                    helper.assertTrue(!entities.get(i).needsSync, "reading does not resurrect consumed sync");
+                    helper.assertTrue(!org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.get(entities.get(i)), "reading does not resurrect consumed sync");
                     Vec3 write = new Vec3(.625, -.0, -.125);
                     ((EntityVelocityAccessor) entities.get(i)).eco$rawVelocity(write);
                     helper.assertTrue(entities.get(i).getDeltaMovement() == write, "raw accessor writes same authority");
@@ -73,7 +74,7 @@ final class AuthoritativeVelocityParity {
     private static void reset(List<LivingEntity> entities) {
         for (int i = 0; i < entities.size(); i++) {
             entities.get(i).setDeltaMovement(new Vec3(i * .125, -.0, -i * .25));
-            entities.get(i).needsSync = false;
+            org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.set(entities.get(i), false);
         }
     }
     private static Vec3[] snapshot(List<LivingEntity> entities) {

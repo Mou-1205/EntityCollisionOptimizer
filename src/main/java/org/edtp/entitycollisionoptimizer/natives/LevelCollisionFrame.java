@@ -54,21 +54,75 @@ final class LevelCollisionFrame {
     private long nativeTeamRevision;
     private boolean active;
     private boolean initialized;
+    /** Bounds moved while the frame was inactive (chunk load / spawn); flushed at begin(). */
+    private final java.util.Set<Entity> dirtyBounds =
+            java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+    private long beginNanos;
+    private long insertNanosThisWindow;
+    private long insertCountThisWindow;
+    /** Tracking-start bursts while inactive; flushed at begin(). */
+    private final java.util.List<Entity> pendingAdds = new java.util.ArrayList<>();
 
     synchronized void begin(ServerLevel level) {
+        long t0 = System.nanoTime();
+        org.edtp.entitycollisionoptimizer.NativePathStats.BEGIN_COUNT.incrementAndGet();
         if (!initialized) {
             initialized = true;
+            long tb = System.nanoTime();
             // Bootstrap once. Tracking callbacks own membership after this point.
             CollisionFrame.forEachSectionEntity(level, entity -> {
                 if (!entity.isRemoved()) addEntity(entity);
             });
+            org.edtp.entitycollisionoptimizer.NativePathStats.BOOTSTRAP_COUNT.incrementAndGet();
+            org.edtp.entitycollisionoptimizer.NativePathStats.BOOTSTRAP_NANOS
+                    .addAndGet(System.nanoTime() - tb);
+        }
+        if (!pendingAdds.isEmpty()) {
+            var batch = pendingAdds.toArray(new Entity[0]);
+            pendingAdds.clear();
+            for (Entity entity : batch) {
+                if (!entity.isRemoved()) addEntityNow(entity);
+            }
+        }
+        if (!dirtyBounds.isEmpty()) {
+            long td = System.nanoTime();
+            int flushed = 0;
+            for (Entity entity : dirtyBounds) {
+                if (!entity.isRemoved() && ids.contains(entity)) {
+                    int slot = bodies.bindBody(entity);
+                    refreshNativeMetadata(ids.getNativeId(entity), entity, bodies.movementRow(slot));
+                    flushed++;
+                }
+            }
+            dirtyBounds.clear();
+            org.edtp.entitycollisionoptimizer.NativePathStats.DIRTY_FLUSH_COUNT.addAndGet(flushed);
+            org.edtp.entitycollisionoptimizer.NativePathStats.DIRTY_FLUSH_NANOS
+                    .addAndGet(System.nanoTime() - td);
         }
         invalidateStalePushEligibility();
         active = true;
+        beginNanos = t0;
+        insertNanosThisWindow = 0L;
+        insertCountThisWindow = 0L;
+        long beginCost = System.nanoTime() - t0;
+        org.edtp.entitycollisionoptimizer.NativePathStats.BEGIN_NANOS.addAndGet(beginCost);
+        if (beginCost > 2_000_000L) {
+            org.edtp.entitycollisionoptimizer.EntityCollisionOptimizer.LOGGER.warn(
+                    "[ECO_SPIKE] begin took {} ms", beginCost / 1_000_000L);
+        }
     }
 
     synchronized void end() {
         active = false;
+        long frameNanos = System.nanoTime() - beginNanos;
+        if (beginNanos != 0L && (frameNanos > 40_000_000L || insertNanosThisWindow > 2_000_000L)) {
+            org.edtp.entitycollisionoptimizer.EntityCollisionOptimizer.LOGGER.warn(
+                    "[ECO_SPIKE] server-tick window {} ms inserts={} insertMs={}",
+                    frameNanos / 1_000_000L,
+                    insertCountThisWindow,
+                    insertNanosThisWindow / 1_000_000L);
+        }
+        beginNanos = 0L;
     }
 
     synchronized void close() {
@@ -87,7 +141,19 @@ final class LevelCollisionFrame {
         if (!initialized || entity.isRemoved() || ids.contains(entity)) {
             return;
         }
+        if (!active) {
+            pendingAdds.add(entity);
+            return;
+        }
+        addEntityNow(entity);
+    }
 
+    private void addEntityNow(Entity entity) {
+        if (entity.isRemoved() || ids.contains(entity)) {
+            return;
+        }
+
+        long t0 = System.nanoTime();
         int nativeId = ids.addEntity(entity);
         if (!VanillaMethodDetector.usesVanillaGetTeam(entity)) derivedTeams.add(entity);
         BlockPos position = entity.blockPosition();
@@ -102,14 +168,29 @@ final class LevelCollisionFrame {
         if (!VanillaMethodDetector.usesVanillaCanBeCollidedWith(entity)) {
             refreshNativeMetadata(nativeId, entity, MemorySegment.NULL);
         }
+        long cost = System.nanoTime() - t0;
+        org.edtp.entitycollisionoptimizer.NativePathStats.INSERT_COUNT.incrementAndGet();
+        org.edtp.entitycollisionoptimizer.NativePathStats.INSERT_NANOS.addAndGet(cost);
+        insertNanosThisWindow += cost;
+        insertCountThisWindow++;
+        if (cost > 500_000L) {
+            org.edtp.entitycollisionoptimizer.EntityCollisionOptimizer.LOGGER.warn(
+                    "[ECO_SPIKE] addEntity {} took {} us", entity.getType(), cost / 1000L);
+        }
     }
 
     synchronized void updateBoundingBox(Entity entity) {
         if (!initialized || !ids.contains(entity)) {
             return;
         }
-        int nativeId = ids.getNativeId(entity);
         int slot = bodies.bindBody(entity);
+        if (!active) {
+            // Chunk load / spawn bursts: keep the Java row current and defer the FFI sync.
+            dirtyBounds.add(entity);
+            return;
+        }
+        dirtyBounds.remove(entity);
+        int nativeId = ids.getNativeId(entity);
         refreshNativeMetadata(nativeId, entity, bodies.movementRow(slot));
     }
 
@@ -130,6 +211,8 @@ final class LevelCollisionFrame {
     }
 
     synchronized void removeEntity(Entity entity) {
+        dirtyBounds.remove(entity);
+        pendingAdds.remove(entity);
         int nativeId = ids.getNativeId(entity);
         if (nativeId < 0) return;
         FFMBackend.removeEntity(nativeContext, nativeId);
@@ -259,7 +342,7 @@ final class LevelCollisionFrame {
             if (target.isRemoved() || target.isSpectator()) {
                 continue;
             }
-            if (entity == null ? !target.canBeCollidedWith(null) : !entity.canCollideWith(target)) {
+            if (entity == null ? !target.canBeCollidedWith() : !entity.canCollideWith(target)) {
                 continue;
             }
             shapes.add(Shapes.create(target.getBoundingBox()));

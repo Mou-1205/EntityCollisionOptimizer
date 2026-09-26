@@ -1,4 +1,5 @@
 package org.edtp.entitycollisionoptimizer.gametest.mixin;
+import net.minecraft.world.level.block.Blocks;
 
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;

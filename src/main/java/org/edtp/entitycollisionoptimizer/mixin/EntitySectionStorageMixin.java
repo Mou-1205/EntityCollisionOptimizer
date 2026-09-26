@@ -27,7 +27,9 @@ public abstract class EntitySectionStorageMixin implements EntitySectionStorageL
     )
     private void eco$nativeGetEntities(EntityTypeTest<?, ?> type, AABB box, AbortableIterationConsumer<?> consumer, CallbackInfo ci) {
         ServerLevel level = eco$queryLevel;
-        if (level == null) return;
+        // Chunk load / spawn bursts must keep vanilla section iteration: the native index is
+        // not warm yet and every query would take the synchronized FFM path.
+        if (level == null || !CollisionFrame.isFrameActive(level)) return;
         CollisionFrame.getEntities(level, type, box, consumer);
         ci.cancel();
     }
@@ -39,7 +41,7 @@ public abstract class EntitySectionStorageMixin implements EntitySectionStorageL
     )
     private void eco$nativeGetEntitiesAll(AABB box, AbortableIterationConsumer<?> consumer, CallbackInfo ci) {
         ServerLevel level = eco$queryLevel;
-        if (level == null) return;
+        if (level == null || !CollisionFrame.isFrameActive(level)) return;
         CollisionFrame.getEntities(level, box, consumer);
         ci.cancel();
     }

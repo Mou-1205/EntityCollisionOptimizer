@@ -4,8 +4,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySelector;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.level.gamerules.GameRules;
-import org.edtp.entitycollisionoptimizer.gametest.mixin.LivingEntityTestInvoker;
+import net.minecraft.world.level.GameRules;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -14,6 +13,7 @@ import java.util.List;
 /** Reference implementations of vanilla collision algorithms for parity tests. */
 final class VanillaReference {
     private static final Method PUSH_ENTITIES = pushEntitiesMethod();
+    private static final Method DO_PUSH = doPushMethod();
 
     private VanillaReference() {
     }
@@ -30,7 +30,7 @@ final class VanillaReference {
         }
 
         ServerLevel level = (ServerLevel) source.level();
-        int maxCramming = level.getGameRules().get(GameRules.MAX_ENTITY_CRAMMING);
+        int maxCramming = level.getGameRules().getRule(GameRules.RULE_MAX_ENTITY_CRAMMING).get();
         if (maxCramming > 0
                 && list.size() > maxCramming - 1
                 && source.getRandom().nextInt(4) == 0) {
@@ -41,12 +41,22 @@ final class VanillaReference {
                 }
             }
             if (nonPassengers > maxCramming - 1) {
-                source.hurtServer(level, source.damageSources().cramming(), 6.0F);
+                source.hurt(source.damageSources().cramming(), 6.0F);
             }
         }
 
         for (Entity entity : list) {
-            ((LivingEntityTestInvoker) source).entityCollisionOptimizer$invokeDoPush(entity);
+            // Virtual dispatch: IronGolem and friends override doPush.
+            try {
+                DO_PUSH.invoke(source, entity);
+            } catch (IllegalAccessException failure) {
+                throw new IllegalStateException("Cannot access LivingEntity.doPush", failure);
+            } catch (InvocationTargetException failure) {
+                Throwable cause = failure.getCause();
+                if (cause instanceof RuntimeException runtimeFailure) throw runtimeFailure;
+                if (cause instanceof Error error) throw error;
+                throw new IllegalStateException("LivingEntity.doPush failed", cause);
+            }
         }
     }
 
@@ -82,6 +92,16 @@ final class VanillaReference {
     private static Method pushEntitiesMethod() {
         try {
             Method method = LivingEntity.class.getDeclaredMethod("pushEntities");
+            method.setAccessible(true);
+            return method;
+        } catch (ReflectiveOperationException failure) {
+            throw new ExceptionInInitializerError(failure);
+        }
+    }
+
+    private static Method doPushMethod() {
+        try {
+            Method method = LivingEntity.class.getDeclaredMethod("doPush", Entity.class);
             method.setAccessible(true);
             return method;
         } catch (ReflectiveOperationException failure) {

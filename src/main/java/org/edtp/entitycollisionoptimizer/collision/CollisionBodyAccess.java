@@ -7,6 +7,8 @@ import net.minecraft.world.phys.Vec3;
 public interface CollisionBodyAccess {
     Vec3 eco$readVelocity();
     void eco$writeVelocity(Vec3 value);
+    /** Unconditional field+table store used by native publish and test fixtures. */
+    void eco$publishVelocity(Vec3 value);
     boolean eco$readNeedsSync();
     void eco$writeNeedsSync(boolean value);
     void eco$writeNoPhysics(boolean value);

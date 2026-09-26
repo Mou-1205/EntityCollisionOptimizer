@@ -13,14 +13,18 @@ public final class CollisionOptimizerCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("eco")
-                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                .requires(source -> source.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .executes(CollisionOptimizerCommand::status)
                 .then(Commands.literal("check").executes(CollisionOptimizerCommand::status)));
     }
 
     private static int status(CommandContext<CommandSourceStack> context) {
-        context.getSource().sendSuccess(() -> Component.literal(
-                "Entity Collision Optimizer: FFM initialized=" + FFMBackend.isInitialized()), false);
+        FFMBackend.initialize();
+        String stats = org.edtp.entitycollisionoptimizer.NativePathStats.report();
+        String line = "Entity Collision Optimizer: FFM initialized=" + FFMBackend.isInitialized()
+                + " | " + stats;
+        org.edtp.entitycollisionoptimizer.EntityCollisionOptimizer.LOGGER.info("[ECO] {}", line);
+        context.getSource().sendSuccess(() -> Component.literal(line), false);
         return 1;
     }
 }

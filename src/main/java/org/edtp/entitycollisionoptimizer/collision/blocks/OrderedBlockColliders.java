@@ -88,7 +88,8 @@ public final class OrderedBlockColliders {
 
         private void add(BlockState state, int x, int y, int z) {
             pos.set(x, y, z);
-            VoxelShape shape = context.getCollisionShape(state, level, pos);
+            // Context-sensitive shapes (scaffolding, powder snow) must see the same CollisionContext as vanilla.
+            VoxelShape shape = state.getCollisionShape(level, pos, context);
             if (shape == Shapes.block()) {
                 if (box.intersects(x, y, z, x + 1.0, y + 1.0, z + 1.0)) {
                     result.add(shape, x, y, z);

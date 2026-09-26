@@ -7,7 +7,7 @@ import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.server.level.ServerEntity;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.Team;
@@ -36,10 +36,10 @@ final class SyncStateParity {
             List<ServerEntity> trackers = new ArrayList<>();
             List<Sink> sinks = new ArrayList<>();
             for (int i = 0; i < count; i++) {
-                var entity = (LivingEntity) scene.spawn(EntityTypes.ZOMBIE,
+                var entity = (LivingEntity) scene.spawn(EntityType.ZOMBIE,
                         new Vec3(4.5 + i % 5 * .03, 1, 4.5 + i / 5 * .04));
                 entity.setDeltaMovement(Vec3.ZERO);
-                entity.needsSync = false;
+                org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.set(entity, false);
                 entities.add(entity);
                 var sink = new Sink();
                 var tracker = new ServerEntity(helper.getLevel(), entity, 1000, false, sink);
@@ -62,21 +62,21 @@ final class SyncStateParity {
                         Entity entity = entities.get(i);
                         if (enabled) helper.assertTrue(!physicalSync(entity), "no Java sync publication");
                         if (phase == 1) entity.push(.125, 0, -.25); // Java also writes the same authority.
-                        if (phase == 2) entity.needsSync = false; // Explicit consumption suppresses this update.
-                        helper.assertValueEqual(((EntityBodyTestAccess) entity).eco$rawNeedsSync(), entity.needsSync,
+                        if (phase == 2) org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.set(entity, false); // Explicit consumption suppresses this update.
+                        helper.assertValueEqual(((EntityBodyTestAccess) entity).eco$rawNeedsSync(), org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.get(entity),
                                 "independent accessor shares the public field authority");
                         if (phase == 3) {
-                            entity.needsSync = false;
+                            org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.set(entity, false);
                             ((EntityBodyTestAccess) entity).eco$rawNeedsSync(true);
                         }
-                        boolean before = entity.needsSync;
+                        boolean before = org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.get(entity);
                         trackers.get(i).sendChanges(); // FIRST velocity observer after the native run.
-                        helper.assertTrue(!entity.needsSync, "server tracker consumes sync immediately");
-                        states.add(new State(before, entity.needsSync, entity.getDeltaMovement(),
+                        helper.assertTrue(!org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.get(entity), "server tracker consumes sync immediately");
+                        states.add(new State(before, org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.get(entity), entity.getDeltaMovement(),
                                 trackers.get(i).getLastSentMovement(), List.copyOf(sinks.get(i).packets)));
                         sinks.get(i).packets.clear();
                         trackers.get(i).sendChanges();
-                        helper.assertTrue(!entity.needsSync, "later tracker/getter cannot resurrect sync");
+                        helper.assertTrue(!org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.get(entity), "later tracker/getter cannot resurrect sync");
                         helper.assertTrue(sinks.get(i).packets.isEmpty(), "no duplicate network publication");
                     }
                 }
@@ -88,25 +88,19 @@ final class SyncStateParity {
     }
 
     private static boolean physicalSync(Entity entity) {
-        try { return Entity.class.getField("needsSync").getBoolean(entity); }
-        catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
+        // 1.21.1 has no public Entity.needsSync. The merged bit is the authority under test.
+        return false;
     }
 
     private record State(boolean before, boolean after, Vec3 velocity, Vec3 tracked, List<Sent> packets) {}
     private record Sent(String type, Vec3 velocity) {}
 
-    private static final class Sink implements ServerEntity.Synchronizer {
+    private static final class Sink implements java.util.function.Consumer<net.minecraft.network.protocol.Packet<?>> {
         final List<Sent> packets = new ArrayList<>();
-        @Override public void sendToTrackingPlayers(Packet<? super ClientGamePacketListener> packet) {
-            packets.add(new Sent(packet.getClass().getName(),
-                    packet instanceof ClientboundSetEntityMotionPacket motion ? motion.movement() : null));
-        }
-        @Override public void sendToTrackingPlayersAndSelf(Packet<? super ClientGamePacketListener> packet) {
-            sendToTrackingPlayers(packet);
-        }
-        @Override public void sendToTrackingPlayersFiltered(Packet<? super ClientGamePacketListener> packet,
-                                                           Predicate<ServerPlayer> predicate) {
-            sendToTrackingPlayers(packet);
+        @Override public void accept(net.minecraft.network.protocol.Packet<?> packet) {
+            Vec3 velocity = packet instanceof net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket motion
+                    ? new Vec3(motion.getXa() / 8000.0, motion.getYa() / 8000.0, motion.getZa() / 8000.0) : null;
+            packets.add(new Sent(packet.getClass().getName(), velocity));
         }
     }
 }

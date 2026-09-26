@@ -26,3 +26,10 @@ __pycache__/
 /analysis_samples/
 /mspt_analysis/
 /extract_mspt_curves.py
+
+# Local session memory (do not upload)
+/LOCAL_SESSION_MEMORY.md
+
+# Local in-game diagnostics (do not upload)
+/eco-ingame-check*.png
+/tools/*.py

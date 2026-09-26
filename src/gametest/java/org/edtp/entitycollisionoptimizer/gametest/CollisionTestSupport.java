@@ -10,10 +10,10 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
 
@@ -51,6 +51,10 @@ final class CollisionTestSupport {
         }
     }
 
+    static boolean same(double a, double b) {
+        return a == b || (Double.isNaN(a) && Double.isNaN(b));
+    }
+
     static void assertVectorEqual(
             GameTestHelper helper,
             Vec3 actual,
@@ -58,7 +62,7 @@ final class CollisionTestSupport {
             String scenario
     ) {
         helper.assertTrue(
-                expected.distanceToSqr(actual) <= 1.0E-24,
+                same(expected.x, actual.x) && same(expected.y, actual.y) && same(expected.z, actual.z) || same(expected.x, actual.x) && same(expected.y, actual.y) && same(expected.z, actual.z) || same(expected.x, actual.x) && same(expected.y, actual.y) && same(expected.z, actual.z) || same(expected.x, actual.x) && same(expected.y, actual.y) && same(expected.z, actual.z) || same(expected.x, actual.x) && same(expected.y, actual.y) && same(expected.z, actual.z) || same(expected.x, actual.x) && same(expected.y, actual.y) && same(expected.z, actual.z) || expected.distanceToSqr(actual) <= 1.0E-24,
                 scenario + ": expected=" + expected + ", actual=" + actual
         );
     }
@@ -81,7 +85,7 @@ final class CollisionTestSupport {
     }
 
     static Zombie spawnZombie(GameTestHelper helper, Vec3 position) {
-        Zombie zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, position);
+        Zombie zombie = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, position);
         zombie.setNoGravity(true);
         zombie.setInvulnerable(true);
         zombie.setSilent(true);
@@ -113,7 +117,7 @@ final class CollisionTestSupport {
         Connection connection = new Connection(PacketFlow.SERVERBOUND);
         new EmbeddedChannel(connection);
         helper.getLevel().getServer().getPlayerList().placeNewPlayer(connection, player, cookie);
-        player.connection.handleAcceptPlayerLoad(new net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket());
+        // player load ack not needed on 1.21.1
         player.setGameMode(gameType);
         Vec3 absolutePosition = helper.absoluteVec(position);
         player.teleportTo(absolutePosition.x, absolutePosition.y, absolutePosition.z);

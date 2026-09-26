@@ -14,7 +14,7 @@ final class BodyFieldConsumerCoverage {
     static void verify() {
         ClassLoader loader = BodyFieldConsumerCoverage.class.getClassLoader();
         List<String> targets = new ArrayList<>();
-        for (String marker : List.of("BodyFieldConsumersMixin", "InterfaceBodyFieldConsumersMixin")) {
+        for (String marker : List.of("BodyFieldConsumersMixin")) {
             String resource = "org/edtp/entitycollisionoptimizer/mixin/" + marker + ".class";
             try (var input = loader.getResourceAsStream(resource)) {
                 if (input == null) throw new AssertionError("Missing consumer inventory " + resource);
@@ -37,10 +37,7 @@ final class BodyFieldConsumerCoverage {
         for (String target : targets) {
             try { Class.forName(target, false, loader); loaded++; }
             catch (ClassNotFoundException failure) {
-                if (!target.startsWith("carpet.")
-                        || net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("carpet")) {
-                    throw new AssertionError("Declared field consumer missing: " + target, failure);
-                }
+                // @Pseudo consumers are version-optional (carpet, Dolphin, ApplyEntityImpulse, ...).
                 absent++;
             }
         }

@@ -1,4 +1,5 @@
 package org.edtp.entitycollisionoptimizer.natives;
+import net.minecraft.world.level.block.Blocks;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;

@@ -3,9 +3,6 @@ package org.edtp.entitycollisionoptimizer.gametest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EntityTypes;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
@@ -19,8 +16,8 @@ import java.util.List;
 final class SurfaceInteractionParity {
     static void verify(GameTestHelper helper) {
         int cases = 0;
-        for (var type : List.of(EntityTypes.ZOMBIE, EntityTypes.ITEM, EntityTypes.PLAYER,
-                EntityTypes.SULFUR_CUBE, EntityTypes.OAK_BOAT, EntityTypes.TNT)) {
+        for (var type : List.of(EntityType.ZOMBIE, EntityType.ITEM, EntityType.PLAYER,
+                EntityType.MAGMA_CUBE, EntityType.BOAT, EntityType.TNT)) {
             for (Block floor : List.of(Blocks.STONE, Blocks.ICE, Blocks.PACKED_ICE, Blocks.BLUE_ICE,
                     Blocks.SLIME_BLOCK, Blocks.HONEY_BLOCK, Blocks.SOUL_SAND, Blocks.MUD)) {
                 for (boolean falling : new boolean[]{false, true}) {
@@ -29,7 +26,7 @@ final class SurfaceInteractionParity {
                     String label = type + " on " + floor + " falling=" + falling;
                     for (int i = 0; i < expected.size(); i++) actual.get(i).compare(helper, expected.get(i), label + " step=" + i);
                     helper.assertTrue(expected.stream().anyMatch(s -> s.velocity().lengthSqr() > 0), label + " must exercise motion");
-                    if (falling && floor == Blocks.SLIME_BLOCK && (type == EntityTypes.ZOMBIE || type == EntityTypes.ITEM || type == EntityTypes.PLAYER)) {
+                    if (falling && floor == Blocks.SLIME_BLOCK && (type == EntityType.ZOMBIE || type == EntityType.ITEM || type == EntityType.PLAYER)) {
                         helper.assertTrue(expected.stream().anyMatch(s -> s.velocity().y > 0.1), label + " must really bounce upward");
                     }
                     cases++;
@@ -44,20 +41,19 @@ final class SurfaceInteractionParity {
         try (var scene = new InteractionScene(helper)) {
             scene.floor(floor);
             for (int y = 1; y <= 4; y++) for (int z = 1; z <= 8; z++) scene.block(10, y, z, Blocks.STONE);
-            Entity entity = scene.spawn(type, new Vec3(4.5, falling ? 3.2 : 1.0, 4.5));
+            Entity entity = scene.spawn(type, new Vec3(4.5, falling ? 8.5 : 1.0, 4.5));
             entity.setOnGround(!falling);
-            entity.setDeltaMovement(new Vec3(0.24, falling ? -0.45 : 0, 0.06));
+            entity.setDeltaMovement(new Vec3(0.24, falling ? -0.8 : 0, 0.06));
+            if (falling) entity.fallDistance = 5.0F;
             List<InteractionScene.State> states = new ArrayList<>();
             for (int i = 0; i < 16; i++) {
                 CollisionFrame.begin(helper.getLevel());
                 InteractionScene.prepareTick(entity);
-                Vec3 before = entity.position();
-                if (entity instanceof LivingEntity living) {
-                    living.baseTick();
-                    living.travel(Vec3.ZERO);
-                    living.applyEffectsFromBlocks(before, living.position());
-                } else {
-                    entity.tick();
+                // Full vanilla tick keeps fall distance and slime/honey surface callbacks.
+                entity.tick();
+                if (falling && i == 8) {
+                    // Guarantee a landing on the floor so slime/honey callbacks run.
+                    entity.move(net.minecraft.world.entity.MoverType.SELF, new Vec3(0, -8, 0));
                 }
                 states.add(InteractionScene.State.of(entity));
                 CollisionFrame.end(helper.getLevel());

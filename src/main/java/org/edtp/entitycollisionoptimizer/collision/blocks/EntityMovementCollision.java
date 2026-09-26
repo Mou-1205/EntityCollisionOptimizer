@@ -22,6 +22,7 @@ public final class EntityMovementCollision {
 
     /** Caller owns the transaction through movement publication, including exceptional exits. */
     public static NativeMovement solve(Entity entity, Vec3 requested) {
+        org.edtp.entitycollisionoptimizer.NativePathStats.MOVEMENT_SOLVES.incrementAndGet();
         var level = entity.level();
         NativeMovement movement = new NativeMovement(entity, requested, null, true);
         try {
@@ -30,10 +31,16 @@ public final class EntityMovementCollision {
             movement.steppingState();
             try (NativeShapeBatch shapes = new NativeShapeBatch()) {
                 if (requested.lengthSqr() != 0.0) {
+                    long t0 = System.nanoTime();
                     OrderedBlockColliders.collectNative(level, CollisionContext.of(entity), entity,
                             scan, hardIds, shapes);
+                    org.edtp.entitycollisionoptimizer.NativePathStats.COLLECT_NANOS
+                            .addAndGet(System.nanoTime() - t0);
                 }
+                long t1 = System.nanoTime();
                 movement.solve(shapes, false);
+                org.edtp.entitycollisionoptimizer.NativePathStats.SOLVE_NANOS
+                        .addAndGet(System.nanoTime() - t1);
             }
             if (movement.needsStep()) collectStep(entity, hardIds, movement);
             return movement;
@@ -53,6 +60,7 @@ public final class EntityMovementCollision {
 
     public static Vec3 collideBox(Level level, CollisionContext context, Entity entity,
                                   Vec3 requested, AABB box, List<VoxelShape> entities) {
+        org.edtp.entitycollisionoptimizer.NativePathStats.BOX_SOLVES.incrementAndGet();
         try (NativeMovement movement = new NativeMovement(entity, requested, box, false);
              NativeShapeBatch shapes = new NativeShapeBatch()) {
             OrderedBlockColliders.collectNative(level, context, entity, movement.stepScan(), entities, shapes);

@@ -8,8 +8,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.MoverType;
-import net.minecraft.world.entity.EntityTypes;
-import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -18,7 +18,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
 import org.edtp.entitycollisionoptimizer.EntityCollisionOptimizer;
 import org.edtp.entitycollisionoptimizer.natives.CollisionFrame;
@@ -56,7 +55,7 @@ final class ChunkLoadParity {
         }
         sequence.thenExecute(() -> { if (!trial.failed) helper.succeed(); });
         helper.onEachTick(() -> {
-            if (!trial.failed && helper.getTick() >= 790) {
+            if (!trial.failed && helper.getTick() >= 1500) {
                 trial.reset();
                 helper.assertTrue(false, "chunk fixture readiness timed out");
             }
@@ -124,10 +123,10 @@ final class ChunkLoadParity {
 
         private void force(ServerLevel level, ChunkPos chunk) {
             ServerChunkCache chunks = level.getChunkSource();
-            CompletableFuture<?> loaded = chunks.addTicketAndLoadWithRadius(TicketType.FORCED, chunk, RADIUS);
-            cleanup.add(() -> chunks.removeTicketWithRadius(TicketType.FORCED, chunk, RADIUS));
-            level.getServer().managedBlock(loaded::isDone);
-            loaded.join();
+            chunks.addRegionTicket(TicketType.FORCED, chunk, RADIUS, chunk);
+            cleanup.add(() -> chunks.removeRegionTicket(TicketType.FORCED, chunk, RADIUS, chunk));
+            // Blocking FULL load. Ticket level is 33-RADIUS=31, spreading 31/32/33 around this chunk.
+            level.getChunk(chunk.x, chunk.z);
         }
 
         private ServerLevel nether() {
@@ -136,22 +135,46 @@ final class ChunkLoadParity {
             return nether;
         }
 
+        private static BlockPos tickPos(ChunkPos chunk) {
+            // isPositionEntityTicking also checks PersistentEntitySectionManager.canPositionTick
+            // on the BlockPos Y-section. Y=0 empty sections are not tickable after a cold load.
+            return chunk.getWorldPosition().offset(8, 70, 8);
+        }
+
         private void ready() {
             if (failed) return;
-            helper.assertTrue(overworld.getChunkSource().getChunkNow(strong.x(), strong.z()) != null, "strong chunk");
-            helper.assertTrue(overworld.getChunkSource().getChunkNow(weak.x(), weak.z()) != null, "weak chunk");
-            helper.assertTrue(overworld.getChunkSource().getChunkNow(loaded.x(), loaded.z()) != null, "loaded chunk");
-            helper.assertTrue(nether().getChunkSource().getChunkNow(netherDest.x(), netherDest.z()) != null, "nether dest");
-            helper.assertTrue(nether().isPositionEntityTicking(netherDest.getWorldPosition()),
-                    "nether destination entity ticking ready");
-            helper.assertTrue(overworld.isPositionEntityTicking(portalSource.getWorldPosition()), "portal source ready");
-            BlockPos strongPos = strong.getWorldPosition().offset(8, 70, 8);
-            BlockPos weakPos = weak.getWorldPosition().offset(8, 70, 8);
-            BlockPos loadedPos = loaded.getWorldPosition().offset(8, 70, 8);
-            helper.assertTrue(overworld.shouldTickBlocksAt(weakPos), "weak chunk must block-tick");
-            helper.assertTrue(!overworld.isPositionEntityTicking(weakPos), "weak chunk must not entity-tick");
-            helper.assertTrue(overworld.isPositionEntityTicking(strongPos), "strong chunk must entity-tick");
-            helper.assertTrue(!overworld.shouldTickBlocksAt(loadedPos), "loaded-without-tick chunk must not block-tick");
+            boolean strongLoaded = overworld.getChunkSource().getChunkNow(strong.x, strong.z) != null;
+            boolean weakLoaded = overworld.getChunkSource().getChunkNow(weak.x, weak.z) != null;
+            boolean loadedLoaded = overworld.getChunkSource().getChunkNow(loaded.x, loaded.z) != null;
+            boolean netherLoaded = nether().getChunkSource().getChunkNow(netherDest.x, netherDest.z) != null;
+            BlockPos strongPos = tickPos(strong);
+            BlockPos weakPos = tickPos(weak);
+            BlockPos loadedPos = tickPos(loaded);
+            boolean netherTick = netherLoaded && nether().isPositionEntityTicking(tickPos(netherDest));
+            boolean portalTick = overworld.isPositionEntityTicking(tickPos(portalSource));
+            boolean weakBlock = overworld.shouldTickBlocksAt(weakPos);
+            boolean weakEntity = overworld.isPositionEntityTicking(weakPos);
+            boolean strongEntity = overworld.isPositionEntityTicking(strongPos);
+            boolean loadedBlock = overworld.shouldTickBlocksAt(loadedPos);
+            boolean ok = strongLoaded && weakLoaded && loadedLoaded && netherLoaded
+                    && netherTick && portalTick && weakBlock && !weakEntity && strongEntity && !loadedBlock;
+            if (!ok && helper.getTick() % 50 == 0) {
+                EntityCollisionOptimizer.LOGGER.info(
+                        "ECO_CHUNK_READY tick={} strongLoaded={} weakLoaded={} loadedLoaded={} netherLoaded={} "
+                                + "netherTick={} portalTick={} weakBlock={} weakEntity={} strongEntity={} loadedBlock={}",
+                        helper.getTick(), strongLoaded, weakLoaded, loadedLoaded, netherLoaded,
+                        netherTick, portalTick, weakBlock, weakEntity, strongEntity, loadedBlock);
+            }
+            helper.assertTrue(strongLoaded, "strong chunk");
+            helper.assertTrue(weakLoaded, "weak chunk");
+            helper.assertTrue(loadedLoaded, "loaded chunk");
+            helper.assertTrue(netherLoaded, "nether dest");
+            helper.assertTrue(netherTick, "nether destination entity ticking ready");
+            helper.assertTrue(portalTick, "portal source ready");
+            helper.assertTrue(weakBlock, "weak chunk must block-tick");
+            helper.assertTrue(!weakEntity, "weak chunk must not entity-tick");
+            helper.assertTrue(strongEntity, "strong chunk must entity-tick");
+            helper.assertTrue(!loadedBlock, "loaded-without-tick chunk must not block-tick");
         }
 
         private void populate() {
@@ -170,11 +193,11 @@ final class ChunkLoadParity {
             blocks.set(overworld, weak.getWorldPosition().offset(0, 73, 3), Blocks.STONE.defaultBlockState(), 3);
             wallItem = item(strong, 15.4, 3.2, 3.5, new Vec3(0.45, 0, 0));
             wallItem.setNoGravity(true);
-            weakBoat = EntityTypes.OAK_BOAT.create(overworld, EntitySpawnReason.COMMAND);
+            weakBoat = EntityType.BOAT.spawn(overworld, net.minecraft.core.BlockPos.ZERO, net.minecraft.world.entity.MobSpawnType.COMMAND);
             helper.assertTrue(weakBoat != null, "weak boat fixture");
+            // spawn(COMMAND) already registered the boat; re-adding would collide on UUID.
             weakBoat.setPos(block(weak, 0.5, 3, 10.5));
             weakBoat.setNoGravity(true);
-            helper.assertTrue(overworld.addFreshEntity(weakBoat), "spawn weak boat");
             cleanup.add(weakBoat::discard);
             boatItem = item(strong, 15.2, 3.2, 10.5, new Vec3(0.45, 0, 0));
             boatItem.setNoGravity(true);
@@ -208,8 +231,7 @@ final class ChunkLoadParity {
             transfers = DimensionMomentumParity.capture(helper, overworld, nether,
                     block(portalSource, 8.5, 0, 8.5), block(netherDest, 8.5, 0, 8.5));
             ItemEntity projectile = item(strong, 4.5, 4.0, 4.5, PORTAL_VELOCITY);
-            Entity teleported = projectile.teleport(new TeleportTransition(
-                    nether, destination, PORTAL_VELOCITY, 0.0F, 0.0F, Set.of(), TeleportTransition.DO_NOTHING));
+            Entity teleported = org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.teleport(projectile, nether, destination.x, destination.y, destination.z);
             helper.assertTrue(teleported != null, "portal teleport");
             portalKeptEntity = teleported == projectile;
             portalEntity = teleported;

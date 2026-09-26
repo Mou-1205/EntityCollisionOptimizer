@@ -1,5 +1,5 @@
 plugins {
-    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    id 'fabric-loom' version "${loom_version}"
     id 'maven-publish'
 }
 
@@ -86,7 +86,6 @@ if (enabledTestSuites == 1) {
             modId = "entity_collision_optimizer-gametest"
             enableGameTests = true
             eula = true
-            clearRunDirectory = true
         }
     }
 
@@ -126,8 +125,10 @@ if (enabledTestSuites == 1) {
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
     if (providers.gradleProperty("compatModsDir").isPresent()) {
         runtimeOnly fileTree(
                 dir: providers.gradleProperty("compatModsDir").get(),
@@ -147,7 +148,8 @@ processResources {
 }
 
 tasks.withType(JavaCompile).configureEach {
-    options.release = 25
+    // FFM (java.lang.foreign) is final from Java 22. MC 1.21.1 runs fine on 22+.
+    options.release = 22
 }
 
 java {

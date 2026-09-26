@@ -24,6 +24,16 @@ public abstract class LivingEntityStateMixin {
         }
     }
 
+    @Inject(method = "setSleepingPos", at = @At("RETURN"))
+    private void eco$onSetSleepingPos(BlockPos pos, CallbackInfo ci) {
+        ((CollisionCacheState) this).entityCollisionOptimizer$invalidateCollisionCache();
+    }
+
+    @Inject(method = "clearSleepingPos", at = @At("RETURN"))
+    private void eco$onClearSleepingPos(CallbackInfo ci) {
+        ((CollisionCacheState) this).entityCollisionOptimizer$invalidateCollisionCache();
+    }
+
     @Inject(method = "setHealth", at = @At("RETURN"))
     private void eco$onSetHealth(float health, CallbackInfo ci) {
         ((CollisionCacheState) this).entityCollisionOptimizer$invalidateCollisionCache();

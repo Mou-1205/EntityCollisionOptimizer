@@ -2,74 +2,41 @@ package org.edtp.entitycollisionoptimizer.collision;
 
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.scores.PlayerTeam;
-import net.minecraft.world.scores.Team;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Minecraft 26.2's EntitySelector.pushableBy predicate, expressed directly so
- * the FFM path owns collision selection without invoking another mod's query
- * or predicate replacement.
+ * Detects vanilla collision method ownership via reflection.
+ * Accepts both Mojang (dev) and intermediary (production) names — remapJar does not rename string constants.
  */
 public final class VanillaMethodDetector {
 
-    /* This class is a utility class, with no instances. */
     private VanillaMethodDetector() {
     }
 
-    /** Checks if the entity using the vanilla methods.
-     * Will be used to determine wether to use the vanilla collision methods or the FFM ones.
-    */
-    private static final ClassValue<Boolean> USE_VANILLA_GET_TEAM = declaringClass("getTeam", Entity.class);
-    private static final ClassValue<Boolean> USE_VANILLA_CAN_BE_COLLIDED_WITH = declaringClass(
-            "canBeCollidedWith",
-            Entity.class,
-            Entity.class
-    );
-    private static final ClassValue<Boolean> USE_VANILLA_CAN_COLLIDE_WITH = declaringClass(
-            "canCollideWith",
-            Entity.class,
-            Entity.class
-    );
+    private static final ClassValue<Boolean> USE_VANILLA_GET_TEAM =
+            declaringClass(Entity.class, new Class<?>[0], "getTeam", "method_5781");
+    private static final ClassValue<Boolean> USE_VANILLA_CAN_BE_COLLIDED_WITH =
+            declaringClass(Entity.class, new Class<?>[]{Entity.class}, "canBeCollidedWith", "method_30948");
+    private static final ClassValue<Boolean> USE_VANILLA_CAN_COLLIDE_WITH =
+            declaringClass(Entity.class, new Class<?>[]{Entity.class}, "canCollideWith", "method_30949");
+    private static final ClassValue<Boolean> USE_VANILLA_DO_PUSH =
+            declaringClass(LivingEntity.class, new Class<?>[]{Entity.class}, "doPush", "method_6087");
+    private static final ClassValue<Boolean> USE_VANILLA_VECTOR_PUSH =
+            declaringClass(Entity.class, new Class<?>[]{double.class, double.class, double.class},
+                    "push", "method_5762");
+    private static final ClassValue<Boolean> USE_VANILLA_VELOCITY_GETTER =
+            declaringClass(Entity.class, new Class<?>[0], "getDeltaMovement", "method_18798");
+    private static final ClassValue<Boolean> USE_VANILLA_VELOCITY_SETTER =
+            declaringClass(Entity.class, new Class<?>[]{Vec3.class}, "setDeltaMovement", "method_18799");
 
-    private static final ClassValue<Boolean> USE_VANILLA_DO_PUSH = new ClassValue<>() {
-        @Override
-        protected Boolean computeValue(Class<?> type) {
-            Class<?> current = type;
-            while (current != null) {
-                try {
-                    return current.getDeclaredMethod("doPush", Entity.class).getDeclaringClass()
-                            == LivingEntity.class;
-                } catch (NoSuchMethodException ignored) {
-                    current = current.getSuperclass();
-                }
-            }
-            return false;
-        }
-    };
     private static final ClassValue<Boolean> USE_VANILLA_ENTITY_PUSH = new ClassValue<>() {
         @Override
         protected Boolean computeValue(Class<?> type) {
-            for (Class<?> current = type; current != null; current = current.getSuperclass()) {
-                try {
-                    Class<?> owner = current.getDeclaredMethod("push", Entity.class).getDeclaringClass();
-                    // LivingEntity only adds a sleeping guard, which the native batch applies live.
-                    return owner == Entity.class || owner == LivingEntity.class;
-                } catch (NoSuchMethodException ignored) {
-                }
-            }
-            return false;
+            // LivingEntity only adds a sleeping guard, which the native batch applies live.
+            Class<?> owner = findDeclaringClass(type, new Class<?>[]{Entity.class}, "push", "method_5697");
+            return owner == Entity.class || owner == LivingEntity.class;
         }
     };
-    private static final ClassValue<Boolean> USE_VANILLA_VECTOR_PUSH = declaringClass(
-            "push",
-            Entity.class,
-            double.class,
-            double.class,
-            double.class
-    );
-    private static final ClassValue<Boolean> USE_VANILLA_VELOCITY_GETTER = declaringClass("getDeltaMovement", Entity.class);
-    private static final ClassValue<Boolean> USE_VANILLA_VELOCITY_SETTER = declaringClass("setDeltaMovement", Entity.class, Vec3.class);
 
     /** Only Entity's scoreboard lookup is revision-cached; derived vanilla teams are read live. */
     public static boolean usesVanillaGetTeam(Entity entity) {
@@ -101,25 +68,27 @@ public final class VanillaMethodDetector {
                 && USE_VANILLA_VELOCITY_SETTER.get(type);
     }
 
-    /* Returns a ClassValue that checks if <methodName> is declared in the <expectedOwner> class. */
+    private static Class<?> findDeclaringClass(Class<?> type, Class<?>[] parameterTypes, String... candidateNames) {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            for (String name : candidateNames) {
+                try {
+                    return current.getDeclaredMethod(name, parameterTypes).getDeclaringClass();
+                } catch (NoSuchMethodException ignored) {
+                }
+            }
+        }
+        return null;
+    }
+
     private static ClassValue<Boolean> declaringClass(
-            String methodName,
             Class<?> expectedOwner,
-            Class<?>... parameterTypes
+            Class<?>[] parameterTypes,
+            String... candidateNames
     ) {
         return new ClassValue<>() {
             @Override
             protected Boolean computeValue(Class<?> type) {
-                Class<?> current = type;
-                while (current != null) {
-                    try {
-                        return current.getDeclaredMethod(methodName, parameterTypes).getDeclaringClass()
-                                == expectedOwner;
-                    } catch (NoSuchMethodException ignored) {
-                        current = current.getSuperclass();
-                    }
-                }
-                return false;
+                return findDeclaringClass(type, parameterTypes, candidateNames) == expectedOwner;
             }
         };
     }

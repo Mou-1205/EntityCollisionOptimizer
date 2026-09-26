@@ -1,7 +1,7 @@
 package org.edtp.entitycollisionoptimizer.gametest;
 
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.phys.Vec3;
 import org.edtp.entitycollisionoptimizer.natives.CollisionFrame;
 import org.edtp.entitycollisionoptimizer.natives.PushBatch;
@@ -28,7 +28,8 @@ final class PushBatchParity {
                 target.setPos(source.getX() + 0.2, source.getY(), source.getZ() + 0.1);
                 source.setDeltaMovement(Vec3.ZERO);
                 target.setDeltaMovement(Vec3.ZERO);
-                target.push(source);
+                ((org.edtp.entitycollisionoptimizer.gametest.mixin.LivingEntityTestInvoker) source)
+                        .entityCollisionOptimizer$invokeDoPush(target);
                 Vec3 expectedSource = source.getDeltaMovement(), expectedTarget = target.getDeltaMovement();
                 source.setDeltaMovement(Vec3.ZERO);
                 target.setDeltaMovement(Vec3.ZERO);
@@ -37,10 +38,10 @@ final class PushBatchParity {
                 NativeImpulseParity.exact(helper, source.getDeltaMovement(), expectedSource, "late source geometry");
                 NativeImpulseParity.exact(helper, target.getDeltaMovement(), expectedTarget, "late target geometry");
                 // A completed run has already committed its velocity, even without a getter read.
-                nestedTarget.needsSync = false;
+                org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.set(nestedTarget, false);
                 CollisionFrame.begin(level);
                 helper.assertTrue(nestedTarget.getDeltaMovement().lengthSqr() > 0, "new frame preserves committed velocity");
-                helper.assertTrue(!nestedTarget.needsSync, "new frame preserves reset sync");
+                helper.assertTrue(!org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.get(nestedTarget), "new frame preserves reset sync");
             }
             try (PushBatch batch = collect(source)) {
                 for (int phase = 0; phase < 3; phase++) {
@@ -48,17 +49,23 @@ final class PushBatchParity {
                     if (phase == 2) target.clearSleepingPos();
                     source.setDeltaMovement(Vec3.ZERO);
                     target.setDeltaMovement(Vec3.ZERO);
-                    source.needsSync = target.needsSync = false;
-                    target.push(source);
+                    org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.set(source, false); org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.set(target, false);
+                    // Oracle is LivingEntity.doPush, which honors the sleeping guard like the native kernel.
+                    boolean sleeping = phase == 1;
+                    if (!sleeping) {
+                        ((org.edtp.entitycollisionoptimizer.gametest.mixin.LivingEntityTestInvoker) source)
+                                .entityCollisionOptimizer$invokeDoPush(target);
+                    }
                     Vec3 expectedSource = source.getDeltaMovement(), expectedTarget = target.getDeltaMovement();
-                    boolean sync = target.needsSync;
+                    // Sleeping targets are skipped by both paths (doPush guard + native SLEEPING bit).
+                    boolean sync = sleeping ? false : org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.get(target);
                     source.setDeltaMovement(Vec3.ZERO);
                     target.setDeltaMovement(Vec3.ZERO);
-                    source.needsSync = target.needsSync = false;
+                    org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.set(source, false); org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.set(target, false);
                     batch.applyNativeRun(source, 0, 1);
                     NativeImpulseParity.exact(helper, source.getDeltaMovement(), expectedSource, "sleep source phase " + phase);
                     NativeImpulseParity.exact(helper, target.getDeltaMovement(), expectedTarget, "sleep target phase " + phase);
-                    helper.assertValueEqual(target.needsSync, sync, "sleep sync phase " + phase);
+                    helper.assertValueEqual(sync, org.edtp.entitycollisionoptimizer.gametest.GameTestBodies.get(target), "sleep sync phase " + phase);
                 }
             }
         } finally {

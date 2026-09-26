@@ -27,14 +27,14 @@ inline bool pushImpulse(double sourceX, double sourceZ, double targetX, double t
 }
 
 void push(eco::CollisionBody& body, double x, double z) noexcept {
-    // Entity.push first rejects non-finite input, then setDeltaMovement rejects non-finite sums.
-    // The latter still sets needsSync; it does not partially accept individual components.
+    // Entity.push first rejects non-finite impulse; setDeltaMovement then rejects
+    // non-finite sums entirely (no store, no dirty bit).
     if (!std::isfinite(x) || !std::isfinite(z)) return;
     const double vx = body.vx + x;
     const double vy = body.vy + 0.0; // Preserve vanilla's signed-zero addition, too.
     const double vz = body.vz + z;
-    body.needsSync = 1;
     if (!std::isfinite(vx) || !std::isfinite(vy) || !std::isfinite(vz)) return;
+    body.needsSync = 1;
     body.vx = vx;
     body.vy = vy;
     body.vz = vz;

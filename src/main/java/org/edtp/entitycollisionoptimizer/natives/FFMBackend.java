@@ -199,7 +199,8 @@ public final class FFMBackend {
 
     private static MemorySegment prepareEntityBounds(Context nativeContext, int nativeId, AABB entityBounds) {
         nativeContext.ensureOpen();
-        nativeContext.ensureOutputCapacity(nativeId + 1);
+        // Bounds scratch is a fixed 48-byte buffer; do not grow the query output arena on every insert.
+        nativeContext.ensureBoundsBuffer();
         return prepareBounds(nativeContext.boundsBuffer, entityBounds);
     }
 
@@ -669,25 +670,36 @@ public final class FFMBackend {
             }
         }
 
+        private void ensureBoundsBuffer() {
+            if (outputArena == null) {
+                outputArena = Arena.ofShared();
+                boundsBuffer = outputArena.allocate(48, Double.BYTES);
+                outputBuffer = MemorySegment.NULL;
+                nativePushBuffer = MemorySegment.NULL;
+                runIdBuffer = MemorySegment.NULL;
+                outputCapacity = 0;
+            }
+        }
+
         private void ensureOutputCapacity(int requiredElements) {
-            if (outputArena != null && requiredElements <= outputCapacity) {
+            ensureBoundsBuffer();
+            if (outputCapacity > 0 && requiredElements <= outputCapacity) {
                 return;
             }
+            // 2x growth with a floor: entity bursts during chunk load must not reallocate every few inserts.
             int newCapacity = Math.max(
-                    requiredElements,
-                    outputCapacity + (outputCapacity >> 1) + 256
+                    Math.max(requiredElements, 256),
+                    Math.max(outputCapacity * 2, outputCapacity + 512)
             );
-            if (outputArena != null) {
-                outputArena.close();
-            }
-            outputArena = Arena.ofShared();
-            boundsBuffer = outputArena.allocate(48, Double.BYTES);
-            outputBuffer = outputArena.allocate(
+            MemorySegment nextOutput = outputArena.allocate(
                     ((long) newCapacity * 2 + 3) * Integer.BYTES,
                     Integer.BYTES
             );
-            nativePushBuffer = outputArena.allocate((long) newCapacity * Integer.BYTES, Integer.BYTES);
-            runIdBuffer = outputArena.allocate((long) newCapacity * Integer.BYTES, Integer.BYTES);
+            MemorySegment nextPushFlags = outputArena.allocate((long) newCapacity * Integer.BYTES, Integer.BYTES);
+            MemorySegment nextRunIds = outputArena.allocate((long) newCapacity * Integer.BYTES, Integer.BYTES);
+            outputBuffer = nextOutput;
+            nativePushBuffer = nextPushFlags;
+            runIdBuffer = nextRunIds;
             outputCapacity = newCapacity;
             queryResult.output = outputBuffer;
             queryResult.nativePushFlags = nativePushBuffer;

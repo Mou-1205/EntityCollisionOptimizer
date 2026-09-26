@@ -1,4 +1,5 @@
 package org.edtp.entitycollisionoptimizer.gametest;
+import net.minecraft.world.phys.Vec3;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -25,7 +26,7 @@ final class MovingPistonParity {
                 var moving = Blocks.MOVING_PISTON.defaultBlockState().setValue(BlockStateProperties.FACING, direction);
                 for (boolean extending : new boolean[] {false, true}) {
                     for (Block block : List.of(Blocks.STONE, Blocks.STONE_SLAB, Blocks.HONEY_BLOCK)) {
-                        level.setBlock(pos, moving, Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+                        level.setBlock(pos, moving, Block.UPDATE_CLIENTS);
                         var piston = new PistonMovingBlockEntity(pos, moving, block.defaultBlockState(), direction, extending, false);
                         level.setBlockEntity(piston);
                         for (float progress : new float[] {0.0F, 0.25F, 0.5F, 0.75F, 1.0F}) {
@@ -33,7 +34,7 @@ final class MovingPistonParity {
                             ((PistonProgressAccessor) piston).eco$previousProgress(progress);
                             BlockShapeParity.compare(helper, entity, new AABB(pos).inflate(1.2), "moving piston " + cases++);
                             // Put the block outside the query proper: vanilla's halo must still see its moving shape.
-                            BlockShapeParity.compare(helper, entity, new AABB(pos).move(direction.getUnitVec3()).deflate(0.05),
+                            BlockShapeParity.compare(helper, entity, new AABB(pos).move(Vec3.atLowerCornerOf(direction.getNormal())).deflate(0.05),
                                     "moving piston halo " + cases++);
                         }
                         level.removeBlockEntity(pos);
@@ -42,7 +43,7 @@ final class MovingPistonParity {
             }
         } finally {
             level.removeBlockEntity(pos);
-            level.setBlock(pos, original, Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+            level.setBlock(pos, original, Block.UPDATE_CLIENTS);
             if (originalBlockEntity != null) level.setBlockEntity(originalBlockEntity);
         }
         return cases;

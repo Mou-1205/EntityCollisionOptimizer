@@ -1,4 +1,5 @@
 package org.edtp.entitycollisionoptimizer.gametest;
+import net.minecraft.world.level.block.Blocks;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -35,7 +36,7 @@ final class BlockShapeParity {
                 section.setBlockState(pos.getX() & 15, pos.getY() & 15, pos.getZ() & 15, state);
                 BlockMaskParity.checkRow(helper, section.getStates(), pos.getY() & 15, pos.getZ() & 15);
                 compare(helper, entity, new AABB(pos).inflate(0.2), state.toString());
-                var localShape = CollisionContext.of(entity).getCollisionShape(state, level, pos);
+                var localShape = state.getCollisionShape(level, pos, CollisionContext.of(entity));
                 if (seen.add(localShape)) nativeComparisons += NativeVoxelParity.compare(helper, localShape, state.toString());
                 count++;
             }
@@ -55,7 +56,7 @@ final class BlockShapeParity {
     static void compare(GameTestHelper helper, Entity entity, AABB box, String label) {
         CollisionContext context = CollisionContext.of(entity);
         List<VoxelShape> expected = new ArrayList<>();
-        var cursor = new BlockCollisions<VoxelShape>(entity.level(), context, box, false, (pos, shape) -> shape);
+        var cursor = new BlockCollisions<VoxelShape>(entity.level(), entity, box, false, (pos, shape) -> shape);
         cursor.forEachRemaining(expected::add);
         List<VoxelShape> actual = new ArrayList<>();
         OrderedBlockColliders.append(entity.level(), context, box, actual);

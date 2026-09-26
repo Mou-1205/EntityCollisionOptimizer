@@ -76,6 +76,12 @@ public final class CollisionFrame {
         LEVEL_FRAMES.clear();
     }
 
+    /** True only while the level's entity-tick collision frame is open. */
+    public static boolean isFrameActive(ServerLevel level) {
+        LevelCollisionFrame frame = LEVEL_FRAMES.get(level);
+        return frame != null && frame.isActive();
+    }
+
     /** EntitySectionStorage.getEntities through the native index. */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static void getEntities(ServerLevel level, EntityTypeTest type, AABB box,
@@ -152,6 +158,9 @@ public final class CollisionFrame {
     private static LevelCollisionFrame frameFor(ServerLevel level) {
         LevelCollisionFrame frame = LEVEL_FRAMES.computeIfAbsent(level, ignored -> new LevelCollisionFrame());
         if (!frame.isActive()) {
+            org.edtp.entitycollisionoptimizer.NativePathStats.FORCE_BEGIN_COUNT.incrementAndGet();
+            // Last resort only. The native path is not warm between ticks; callers should
+            // have fallen back to vanilla when isFrameActive() is false.
             frame.begin(level);
         }
         return frame;

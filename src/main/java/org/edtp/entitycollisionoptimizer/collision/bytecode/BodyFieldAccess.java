@@ -8,29 +8,69 @@ import org.spongepowered.asm.service.MixinService;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Uniform field access boundary; consumer mixins declare coverage, not per-consumer behavior. */
+/**
+ * Uniform field access boundary; consumer mixins declare coverage, not per-consumer behavior.
+ * Matches both Mojang (dev) and intermediary (production) names — string constants are not remapped.
+ */
 public final class BodyFieldAccess {
-    private static final String ENTITY = "net/minecraft/world/entity/Entity";
-    private static final String VECTOR = "Lnet/minecraft/world/phys/Vec3;";
+    private static final String ENTITY_NAMED = "net/minecraft/world/entity/Entity";
+    private static final String ENTITY_INTERMEDIARY = "net/minecraft/class_1297";
+    private static final String VECTOR_NAMED = "Lnet/minecraft/world/phys/Vec3;";
+    private static final String VECTOR_INTERMEDIARY = "Lnet/minecraft/class_243;";
+    private static final String AABB_NAMED = "Lnet/minecraft/world/phys/AABB;";
+    private static final String AABB_INTERMEDIARY = "Lnet/minecraft/class_238;";
     private static final String ACCESS = "org/edtp/entitycollisionoptimizer/collision/CollisionBodyAccess";
     private static final Map<String, Boolean> ENTITY_TYPES = new ConcurrentHashMap<>();
 
+    private static boolean isEntityName(String name) {
+        return name.equals(ENTITY_NAMED) || name.equals(ENTITY_INTERMEDIARY);
+    }
+
+    private static boolean isVectorDesc(String desc) {
+        return desc.equals(VECTOR_NAMED) || desc.equals(VECTOR_INTERMEDIARY);
+    }
+
+    private static boolean isAabbDesc(String desc) {
+        return desc.equals(AABB_NAMED) || desc.equals(AABB_INTERMEDIARY);
+    }
+
+    private static boolean isPositionName(String name) {
+        return name.equals("position") || name.equals("field_22467");
+    }
+
+    private static boolean isDeltaMovementName(String name) {
+        return name.equals("deltaMovement") || name.equals("field_18276");
+    }
+
+    private static boolean isBbName(String name) {
+        return name.equals("bb") || name.equals("field_6005");
+    }
+
+    private static boolean isNoPhysicsName(String name) {
+        return name.equals("noPhysics") || name.equals("field_5960");
+    }
+
+    private static boolean isNeedsSyncName(String name) {
+        return name.equals("needsSync");
+    }
+
     public static void rewrite(ClassNode node) {
-        boolean entityClass = node.name.equals(ENTITY);
+        boolean entityClass = isEntityName(node.name);
         if (entityClass && node.fields.stream().noneMatch(field ->
-                field.name.equals("deltaMovement") && field.desc.equals(VECTOR)
+                isDeltaMovementName(field.name) && isVectorDesc(field.desc)
                         && (field.access & Opcodes.ACC_PRIVATE) != 0)) {
-            throw new IllegalStateException("Expected Minecraft 26.2's private Entity velocity field");
+            throw new IllegalStateException("Expected private Entity velocity field (pos=" + node.name + ")");
         }
         if (entityClass && node.fields.stream().noneMatch(field ->
-                field.name.equals("position") && field.desc.equals(VECTOR)
+                isPositionName(field.name) && isVectorDesc(field.desc)
                         && (field.access & Opcodes.ACC_PRIVATE) != 0)) {
-            throw new IllegalStateException("Expected Minecraft 26.2's private Entity position field");
+            throw new IllegalStateException("Expected private Entity position field (pos=" + node.name + ")");
         }
-        int reads = 0, writes = 0, positionWrites = 0, boundsWrites = 0;
+        int writes = 0, positionWrites = 0, boundsWrites = 0;
         for (var method : node.methods) {
             // Only these storage primitives may physically touch the unbound field.
             if (entityClass && (method.name.equals("eco$readVelocity") || method.name.equals("eco$writeVelocity")
+                    || method.name.equals("eco$publishVelocity")
                     || method.name.equals("eco$readNeedsSync") || method.name.equals("eco$writeNeedsSync")
                     || method.name.equals("eco$writeNoPhysics") || method.name.equals("eco$writePosition")
                     || method.name.equals("eco$readPosition")
@@ -38,36 +78,38 @@ public final class BodyFieldAccess {
                     || method.name.equals("eco$detachBody"))) continue;
             for (var instruction : method.instructions.toArray()) {
                 if (!(instruction instanceof FieldInsnNode field)) continue;
-                boolean read = field.getOpcode() == Opcodes.GETFIELD;
-                boolean velocity = field.owner.equals(ENTITY) && field.name.equals("deltaMovement") && field.desc.equals(VECTOR);
-                boolean position = field.owner.equals(ENTITY) && field.name.equals("position") && field.desc.equals(VECTOR);
-                boolean bounds = field.owner.equals(ENTITY) && field.name.equals("bb")
-                        && field.desc.equals("Lnet/minecraft/world/phys/AABB;");
-                boolean sync = field.name.equals("needsSync") && field.desc.equals("Z");
-                boolean physics = !read && field.name.equals("noPhysics") && field.desc.equals("Z");
+                // Reads stay as GETFIELD (fast path). Only writes are redirected so the native row stays in sync.
+                if (field.getOpcode() == Opcodes.GETFIELD) continue;
+                boolean ownerEntity = isEntityName(field.owner);
+                boolean velocity = ownerEntity && isDeltaMovementName(field.name) && isVectorDesc(field.desc);
+                boolean position = ownerEntity && isPositionName(field.name) && isVectorDesc(field.desc);
+                boolean bounds = ownerEntity && isBbName(field.name) && isAabbDesc(field.desc);
+                boolean sync = isNeedsSyncName(field.name) && field.desc.equals("Z");
+                boolean physics = isNoPhysicsName(field.name) && field.desc.equals("Z");
                 if (!velocity && !position && !bounds && !((sync || physics) && isEntity(field.owner, node))) continue;
-                if (!read && field.getOpcode() != Opcodes.PUTFIELD) {
+                if (field.getOpcode() != Opcodes.PUTFIELD) {
                     throw new IllegalStateException("Unexpected collision body field opcode");
                 }
-                String name = velocity ? (read ? "eco$readVelocity" : "eco$writeVelocity")
-                        : position ? (read ? "eco$readPosition" : "eco$writePosition")
-                        : bounds ? (read ? "eco$readBounds" : "eco$writeBounds")
-                        : sync ? (read ? "eco$readNeedsSync" : "eco$writeNeedsSync") : "eco$writeNoPhysics";
+                String name = velocity ? "eco$writeVelocity"
+                        : position ? "eco$writePosition"
+                        : bounds ? "eco$writeBounds"
+                        : sync ? "eco$writeNeedsSync" : "eco$writeNoPhysics";
+                // Keep the runtime descriptor so the call matches the remapped interface.
                 method.instructions.set(field, new MethodInsnNode(Opcodes.INVOKEINTERFACE, ACCESS,
-                        name, read ? "()" + field.desc : "(" + field.desc + ")V", true));
-                if (velocity) { if (read) reads++; else writes++; }
-                if (position && !read) positionWrites++;
-                if (bounds && !read) boundsWrites++;
+                        name, "(" + field.desc + ")V", true));
+                if (velocity) writes++;
+                if (position) positionWrites++;
+                if (bounds) boundsWrites++;
             }
         }
-        // Getter, setter and constructor must all be covered; missing coverage is not a fallback.
-        if (entityClass && (reads < 1 || writes < 2)) throw new IllegalStateException("Incomplete Entity velocity access rewrite");
+        // Constructor/setters must cover the stores; missing coverage is not a fallback.
+        if (entityClass && writes < 2) throw new IllegalStateException("Incomplete Entity velocity access rewrite");
         if (entityClass && positionWrites < 2) throw new IllegalStateException("Incomplete Entity position write rewrite");
         if (entityClass && boundsWrites < 2) throw new IllegalStateException("Incomplete Entity bounding box write rewrite");
     }
 
     private static boolean isEntity(String type, ClassNode current) {
-        if (type.equals(ENTITY)) return true;
+        if (isEntityName(type)) return true;
         if (type.equals("java/lang/Object")) return false;
         Boolean cached = ENTITY_TYPES.get(type);
         if (cached != null) return cached;

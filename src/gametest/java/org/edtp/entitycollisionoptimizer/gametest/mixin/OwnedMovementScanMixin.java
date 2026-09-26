@@ -1,4 +1,5 @@
 package org.edtp.entitycollisionoptimizer.gametest.mixin;
+import net.minecraft.world.level.block.Blocks;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
