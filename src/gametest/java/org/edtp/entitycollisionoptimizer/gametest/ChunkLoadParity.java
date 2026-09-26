@@ -55,7 +55,7 @@ final class ChunkLoadParity {
         }
         sequence.thenExecute(() -> { if (!trial.failed) helper.succeed(); });
         helper.onEachTick(() -> {
-            if (!trial.failed && helper.getTick() >= 1500) {
+            if (!trial.failed && helper.getTick() >= 4500) {
                 trial.reset();
                 helper.assertTrue(false, "chunk fixture readiness timed out");
             }

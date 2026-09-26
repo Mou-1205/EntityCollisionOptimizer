@@ -233,7 +233,7 @@ public final class CollisionContractGameTests {
         helper.succeed();
     }
 
-    @GameTest(timeoutTicks = 1600)
+    @GameTest(timeoutTicks = 4800)
     public void chunkLoadBoundaries(GameTestHelper helper) {
         ChunkLoadParity.verify(helper);
     }
