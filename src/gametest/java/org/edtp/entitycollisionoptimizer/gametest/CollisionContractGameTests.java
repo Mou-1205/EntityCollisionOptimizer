@@ -173,6 +173,12 @@ public final class CollisionContractGameTests {
     }
 
     @GameTest(timeoutTicks = 200)
+    public void metadataReentryContract(GameTestHelper helper) {
+        org.edtp.entitycollisionoptimizer.natives.MetadataRefreshChecks.verify(helper);
+        helper.succeed();
+    }
+
+    @GameTest(timeoutTicks = 200)
     public void orderedEntityContract(GameTestHelper helper) {
         CollisionContractParity.order(helper);
         helper.succeed();
