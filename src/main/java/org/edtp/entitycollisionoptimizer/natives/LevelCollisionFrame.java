@@ -273,9 +273,10 @@ final class LevelCollisionFrame {
     @SuppressWarnings({"unchecked", "rawtypes"})
     synchronized void getEntities(EntityTypeTest type, AABB box, AbortableIterationConsumer consumer) {
         FFMBackend.QueryResult result = FFMBackend.queryEntities(nativeContext, box, ids.nativeIdCapacity());
+        int count = result.size();
         int[] snapshot = snapshot(result);
         try {
-            for (int index = 0; index < result.size(); index++) {
+            for (int index = 0; index < count; index++) {
                 int nativeId = snapshot[index];
                 Entity entity = requireEntity(nativeId);
                 Object candidate = type.tryCast(entity);
@@ -290,9 +291,10 @@ final class LevelCollisionFrame {
     @SuppressWarnings("rawtypes")
     synchronized void getEntities(AABB box, AbortableIterationConsumer consumer) {
         FFMBackend.QueryResult result = FFMBackend.queryEntities(nativeContext, box, ids.nativeIdCapacity());
+        int count = result.size();
         int[] snapshot = snapshot(result);
         try {
-            for (int index = 0; index < result.size(); index++) {
+            for (int index = 0; index < count; index++) {
                 if (consumer.accept(requireEntity(snapshot[index])).shouldAbort()) break;
             }
         } finally {
