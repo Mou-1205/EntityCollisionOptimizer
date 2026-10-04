@@ -21,7 +21,6 @@ import java.util.UUID;
 
 /** Owns scenario blocks and entities so every scenario restores its world state. */
 final class IntegrationArena implements AutoCloseable {
-    private static final long PREPARATION_TIMEOUT_NANOS = 30_000_000_000L;
 
     private final ServerLevel level;
     private final Map<BlockPos, BlockState> originalBlocks = new LinkedHashMap<>();
@@ -77,21 +76,19 @@ final class IntegrationArena implements AutoCloseable {
                 .allMatch(level::areEntitiesLoaded);
     }
 
-    void awaitReadyRoom(Vec3 sceneOrigin, int width, int height, int depth) {
-        // GameTest ticks are unthrottled, so pump remote chunk work explicitly instead of
-        // spending the test's tick budget while generation and entity I/O wait for CPU time.
-        long deadline = System.nanoTime() + PREPARATION_TIMEOUT_NANOS;
-        level.getServer().managedBlock(() -> chunkTasksAreReady(sceneOrigin, width, height, depth)
-                || System.nanoTime() >= deadline);
+    boolean awaitReadyRoom(Vec3 sceneOrigin, int width, int height, int depth) {
+        // Non-blocking readiness probe. Blocking the server thread here (managedBlock)
+        // starves the chunk and entity work it waits for and never times out; the
+        // gametest callers instead poll this once per tick until it reports ready.
         if (!chunkTasksAreReady(sceneOrigin, width, height, depth)) {
-            throw new IllegalStateException("Integration-test room did not become ready within 30 seconds");
+            return false;
         }
         for (long packed : requiredChunks) {
-            level.getServer().managedBlock(() -> level.areEntitiesLoaded(packed));
+            if (!level.areEntitiesLoaded(packed)) {
+                return false;
+            }
         }
-        if (!isReadyForEntityTicks()) {
-            throw new IllegalStateException("Integration-test entities did not become ready");
-        }
+        return isReadyForEntityTicks();
     }
 
     private boolean chunkTasksAreReady(Vec3 sceneOrigin, int width, int height, int depth) {

@@ -75,8 +75,7 @@ public final class ZombieCrammingIntegrationGameTests {
                 level.getGameRules().getRule(GameRules.RULE_MAX_ENTITY_CRAMMING)
                         .set(MAX_ENTITY_CRAMMING, level.getServer());
                 arena.buildStoneRoom(sceneOrigin, CHAMBER_SIZE, CHAMBER_HEIGHT, CHAMBER_SIZE);
-                arena.awaitReadyRoom(sceneOrigin, CHAMBER_SIZE, CHAMBER_HEIGHT, CHAMBER_SIZE);
-                prepared = true;
+                prepared = arena.awaitReadyRoom(sceneOrigin, CHAMBER_SIZE, CHAMBER_HEIGHT, CHAMBER_SIZE);
             } catch (RuntimeException | Error failure) {
                 cleanup();
                 throw failure;

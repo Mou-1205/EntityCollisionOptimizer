@@ -69,8 +69,7 @@ public final class TntCrowdIntegrationGameTests {
         private void start() {
             try {
                 arena.buildStoneRoom(sceneOrigin, ROOM_SIZE, ROOM_HEIGHT, ROOM_SIZE);
-                arena.awaitReadyRoom(sceneOrigin, ROOM_SIZE, ROOM_HEIGHT, ROOM_SIZE);
-                prepared = true;
+                prepared = arena.awaitReadyRoom(sceneOrigin, ROOM_SIZE, ROOM_HEIGHT, ROOM_SIZE);
             } catch (RuntimeException | Error failure) {
                 cleanup();
                 throw failure;
