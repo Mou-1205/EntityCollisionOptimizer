@@ -172,6 +172,9 @@ public final class MetadataRefreshChecks {
             } catch (ReflectiveOperationException failure) {
                 throw new AssertionError("Cannot inject isolated metadata fixture", failure);
             }
+            // The port defers inserts while the frame is inactive; open a frame so
+            // addEntity registers probes immediately, as the fixture semantics require.
+            frame.begin(helper.getLevel());
         }
 
         Probe add(double offset) {
