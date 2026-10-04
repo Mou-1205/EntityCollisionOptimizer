@@ -33,3 +33,4 @@ __pycache__/
 # Local in-game diagnostics (do not upload)
 /eco-ingame-check*.png
 /tools/*.py
+.zcodeignore
