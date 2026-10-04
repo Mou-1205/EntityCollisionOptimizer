@@ -88,8 +88,12 @@ final class IntegrationArena implements AutoCloseable {
                 return false;
             }
         }
-        return isReadyForEntityTicks();
+        if (!isReadyForEntityTicks()) {
+            return false;
+        }
+        return true;
     }
+
 
     private boolean chunkTasksAreReady(Vec3 sceneOrigin, int width, int height, int depth) {
         return !requiredChunks.isEmpty()

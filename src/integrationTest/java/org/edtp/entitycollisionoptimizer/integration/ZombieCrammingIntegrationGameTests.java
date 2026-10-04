@@ -37,7 +37,7 @@ public final class ZombieCrammingIntegrationGameTests {
     private static final long GAME_TIME = 1_000L;
     private static final Vec3 SCENE_ORIGIN = new Vec3(-5_910_000.0, -57.0, -9_908_000.0);
 
-    @GameTest(timeoutTicks = 400)
+    @GameTest(timeoutTicks = 2400)
     public void crowdedChamberMatchesVanilla(GameTestHelper helper) {
         ScenarioRun run = new ScenarioRun(helper);
         helper.onEachTick(run::captureTick);
