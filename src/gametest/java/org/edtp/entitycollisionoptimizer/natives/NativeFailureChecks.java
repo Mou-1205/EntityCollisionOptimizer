@@ -84,6 +84,6 @@ public final class NativeFailureChecks {
         } catch (Error failure) {
             return failure;
         }
-        throw helper.assertionException("expected fatal error");
+        throw new AssertionError("expected fatal error");
     }
 }

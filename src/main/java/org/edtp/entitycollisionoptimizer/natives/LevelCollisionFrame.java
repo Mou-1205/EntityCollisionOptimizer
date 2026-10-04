@@ -90,8 +90,7 @@ final class LevelCollisionFrame {
             int flushed = 0;
             for (Entity entity : dirtyBounds) {
                 if (!entity.isRemoved() && ids.contains(entity)) {
-                    int slot = bodies.bindBody(entity);
-                    refreshNativeMetadata(ids.getNativeId(entity), entity, bodies.movementRow(slot));
+                    FFMBackend.updateEntityBounds(nativeContext, ids.getNativeId(entity), entity.getBoundingBox());
                     flushed++;
                 }
             }
