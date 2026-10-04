@@ -4,13 +4,20 @@
 
 <h1 align="center">实体碰撞优化</h1>
 
-<p align="center">面向 Minecraft 26.2 Fabric 服务器的原版等价实体碰撞加速。</p>
+<p align="center">面向 Minecraft 1.21.1 Fabric 服务器的原版等价实体碰撞加速。</p>
 
 <p align="center"><a href="README.md">English</a> | <strong>简体中文</strong></p>
 
 ---
 
-实体碰撞优化是面向 Minecraft 26.2 的服务端 Fabric 模组，通过 C++ native 后端加速实体查询、相互推动和移动碰撞，同时**保持原版实体碰撞行为**。安装即生效，连接服务器的客户端无需安装。
+实体碰撞优化是面向 Minecraft 1.21.1 的服务端 Fabric 模组，通过 C++ native 后端加速实体查询、相互推动和移动碰撞，同时**保持原版实体碰撞行为**。安装即生效，连接服务器的客户端无需安装。
+
+## 免责声明
+
+- 本项目是 [water2004 的上游项目](https://github.com/water2004/EntityCollisionOptimizer)（面向更新版本 Minecraft）的**社区移植版，处于 alpha 阶段**，按"现状"提供，**不附带任何形式的保证**。安装前请务必备份存档。
+- 本项目与 Mojang / Microsoft 无关联，也未获得其认可。"Minecraft" 是 Mojang Synergies AB 的商标。
+- 下方的性能数据来自**上游项目在 Minecraft 26.2 上的实测**，**尚未在本 1.21.1 构建上重新测量**，实际效果会有差异。
+- 发布时点的已知问题见 [Release 说明](https://github.com/Mou-1205/EntityCollisionOptimizer/releases)；问题请通过 [Issues](https://github.com/Mou-1205/EntityCollisionOptimizer/issues) 反馈。
 
 ## 为什么使用实体碰撞优化？
 
@@ -69,10 +76,10 @@ Minecraft 按区段存储实体。一次碰撞查询需要遍历相关区段、�
 
 | 组件 | 要求 |
 | --- | --- |
-| Minecraft | 26.2 |
-| 模组加载器 | Fabric Loader 0.17.0 或更高版本 |
-| 依赖 | Fabric API 0.145.4 或更高的 26.2 兼容版本 |
-| Java | 25 |
+| Minecraft | 1.21.1 |
+| 模组加载器 | Fabric Loader 0.16.0 或更高版本 |
+| 依赖 | Fabric API 0.102.0 或更高的 1.21.1 兼容版本 |
+| Java | 22 或更高（FFM）；推荐 Java 25 |
 | 操作系统 | Windows、Linux 或 macOS |
 | 处理器 | 支持 AVX2 的 x86-64 处理器 |
 
@@ -81,11 +88,9 @@ Minecraft 按区段存储实体。一次碰撞查询需要遍历相关区段、�
 ## 安装
 
 1. 安装 Fabric Loader 和 Fabric API。
-2. 从 [GitHub Releases](https://github.com/water2004/EntityCollisionOptimizer/releases) 下载 Minecraft 26.2 对应的 JAR，放入实例的 `mods` 目录。
+2. 从 [GitHub Releases](https://github.com/Mou-1205/EntityCollisionOptimizer/releases) 下载 Minecraft 1.21.1 对应的 JAR，放入实例的 `mods` 目录。
 
-在本项目支持的 Java 25 上不需要添加任何 JVM 参数。Minecraft 26.2 官方启动器已经启用了 native access；手动启动的独立服务器如果没有该选项，Java 可能只在日志中输出一次 native access 警告，但 Java 25 仍会允许调用，模组可以正常工作。
-
-希望消除这条警告的服务器管理员可以选择添加：
+本构建要求游戏运行在 **Java 22 或更高版本**（模组使用 Java FFM API，Minecraft 1.21.1 默认的 Java 21 无法加载），推荐 Java 25。从 Java 22 起，未启用 native access 时 JVM 会输出一次警告，模组仍可正常工作；希望消除这条警告的服务器管理员可以选择添加：
 
 ```text
 --enable-native-access=ALL-UNNAMED
@@ -104,7 +109,7 @@ Minecraft 按区段存储实体。一次碰撞查询需要遍历相关区段、�
 - 不修改存档格式，也不注册需要同步到客户端的内容。
 - 当前以原版实体为兼容目标，不保证其他模组自定义实体或直接替换同一碰撞路径的实现能够正常工作。
 
-如遇到可以稳定复现的问题，请通过 [Issue Tracker](https://github.com/water2004/EntityCollisionOptimizer/issues) 报告。
+如遇到可以稳定复现的问题，请通过 [Issue Tracker](https://github.com/Mou-1205/EntityCollisionOptimizer/issues) 报告。
 
 ## 构建与测试
 
