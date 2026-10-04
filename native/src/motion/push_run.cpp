@@ -27,8 +27,9 @@ inline bool pushImpulse(double sourceX, double sourceZ, double targetX, double t
 }
 
 void push(eco::CollisionBody& body, double x, double z) noexcept {
-    // Entity.push first rejects non-finite impulse; setDeltaMovement then rejects
-    // non-finite sums entirely (no store, no dirty bit).
+    // Oracle-verified against 1.21.1 doPush: setDeltaMovement rejects any write whose
+    // sum is non-finite (finite components are dropped along with it), so the whole
+    // impulse must be discarded when either the inputs or the sum leave the finite range.
     if (!std::isfinite(x) || !std::isfinite(z)) return;
     const double vx = body.vx + x;
     const double vy = body.vy + 0.0; // Preserve vanilla's signed-zero addition, too.
